@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8" />
+    <title th:text="|Receipt ${receiptNumber}|">Receipt</title>
+    <style th:inline="text">
+        /* Slice 22: brand color drives the header band + title underline. */
+        :root {
+          --brand-primary: [[${branding != null and branding.primaryColor != null and branding.primaryColor != '' ? branding.primaryColor : '#111111'}]];
+        }
+        @page { size: A4; margin: 18mm 16mm 18mm 16mm; }
+        body { font-family: "Helvetica", "Arial", sans-serif; color: #111; font-size: 11pt; line-height: 1.4; }
+        h1, h2, h3 { margin: 0; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 6px 8px; vertical-align: top; }
+        .text-center { text-align: center; }
+        .text-right  { text-align: right; }
+        .muted { color: #555; font-size: 9pt; }
+        .school-header { padding-bottom: 10px; border-bottom: 3px solid var(--brand-primary); margin-bottom: 14px; display: table; width: 100%; }
+        .school-header .logo-cell { display: table-cell; vertical-align: middle; width: 80px; }
+        .school-header .logo-cell img { max-width: 70px; max-height: 70px; }
+        .school-header .name-cell { display: table-cell; vertical-align: middle; text-align: center; }
+        .school-header h1 { font-size: 18pt; letter-spacing: 1px; color: var(--brand-primary); }
+        .school-header .affiliation { font-size: 9pt; color: #666; margin-top: 2px; }
+        .school-header .gstin-cell { display: table-cell; vertical-align: middle; text-align: right; width: 100px; font-size: 8pt; color: #666; }
+        .doc-title { text-align: center; font-size: 14pt; font-weight: bold; text-transform: uppercase; letter-spacing: 1.5px; margin: 12px 0 18px 0; color: var(--brand-primary); border-bottom: 1px dashed var(--brand-primary); padding-bottom: 4px; }
+        .field { display: inline-block; width: 49%; padding: 4px 0; }
+        .label { font-size: 9pt; color: #666; text-transform: uppercase; }
+        .value { font-weight: bold; font-size: 11pt; }
+        .line-items { border: 1px solid #999; margin: 10px 0; }
+        .line-items th { background: var(--brand-primary); color: white; border-bottom: 1px solid #999; text-align: left; font-size: 10pt; }
+        .line-items td { border-bottom: 1px solid #e0e0e0; font-size: 10pt; }
+        .total-row td { font-weight: bold; border-top: 2px solid var(--brand-primary); background: #f6f6f6; }
+        .signatures { margin-top: 60px; }
+        .signature  { display: inline-block; width: 33%; text-align: center; font-size: 9pt; color: #555; padding-top: 4px; border-top: 1px solid #333; }
+        .footer-strip { margin-top: 24px; padding-top: 8px; border-top: 1px solid #ddd; font-size: 8pt; color: #777; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="school-header">
+        <div class="logo-cell">
+            <img th:if="${branding != null and branding.logoUrl != null and branding.logoUrl != ''}"
+                 th:src="${branding.logoUrl}" alt="logo" />
+        </div>
+        <div class="name-cell">
+            <h1 th:text="${school.name}">School Name</h1>
+            <p class="muted">
+                <span th:text="${school.city}">City</span>,
+                <span th:text="${school.state}">State</span>
+                <span th:if="${school.phone}"> · <th:block th:text="${school.phone}">Phone</th:block></span>
+                <span th:if="${school.email}"> · <th:block th:text="${school.email}">Email</th:block></span>
+            </p>
+            <p class="affiliation"
+               th:if="${branding != null and branding.affiliation != null and branding.affiliation != ''}"
+               th:text="${branding.affiliation}">Affiliation</p>
+        </div>
+        <div class="gstin-cell">
+            <div th:if="${branding != null and branding.gstin != null and branding.gstin != ''}">
+                <strong>GSTIN</strong><br/>
+                <span th:text="${branding.gstin}">—</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="doc-title">Fee Receipt</div>
+
+    <div>
+        <span class="field"><span class="label">Receipt No.</span> <span class="value" th:text="${receiptNumber}">001</span></span>
+        <span class="field text-right"><span class="label">Date</span> <span class="value" th:text="${#temporals.format(receiptDate, 'dd MMM yyyy')}">01 Jan 2026</span></span>
+    </div>
+
+    <div>
+        <span class="field"><span class="label">Student</span> <span class="value" th:text="${student.displayName}">Student Name</span></span>
+        <span class="field"><span class="label">Adm. No.</span> <span class="value" th:text="${student.admissionNumber ?: '—'}">ADM001</span></span>
+    </div>
+    <div th:if="${enrollment}">
+        <span class="field"><span class="label">Class / Section</span> <span class="value">[[${enrollment.className}]] [[${enrollment.sectionName}]]</span></span>
+        <span class="field"><span class="label">Roll No.</span> <span class="value" th:text="${enrollment.rollNumber ?: '—'}">10</span></span>
+    </div>
+
+    <table class="line-items">
+        <thead>
+            <tr>
+                <th>Fee head</th>
+                <th class="text-right">Amount (₹)</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr th:each="item : ${lineItems}">
+                <td th:text="${item.label}">Tuition</td>
+                <td class="text-right" th:text="${#numbers.formatDecimal(item.amount, 1, 'COMMA', 2, 'POINT')}">0.00</td>
+            </tr>
+            <tr th:if="${discountAmount != null and discountAmount.compareTo(T(java.math.BigDecimal).ZERO) > 0}">
+                <td>Discount applied</td>
+                <td class="text-right" th:text="|- ${#numbers.formatDecimal(discountAmount, 1, 'COMMA', 2, 'POINT')}|">- 0.00</td>
+            </tr>
+            <tr class="total-row">
+                <td>Total paid</td>
+                <td class="text-right" th:text="${#numbers.formatDecimal(totalPaid, 1, 'COMMA', 2, 'POINT')}">0.00</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p class="muted">Amount in words: <span th:text="${amountInWords}">Zero Rupees Only</span></p>
+    <p><span class="label">Payment mode</span> <span class="value" th:text="${paymentMode}">CASH</span>
+       <span th:if="${paymentRef}"> · Ref: <span th:text="${paymentRef}">—</span></span>
+    </p>
+
+    <div class="signatures">
+        <div class="signature">Cashier / Receipt issued by</div>
+        <div class="signature">Principal</div>
+        <div class="signature">Parent / Guardian</div>
+    </div>
+
+    <p class="muted text-center" style="margin-top: 30px;">
+        This is a computer-generated receipt. No physical signature required.
+    </p>
+    <div class="footer-strip"
+         th:if="${branding != null and (branding.websiteUrl != null or branding.contactPhone != null or branding.contactEmail != null)}">
+        <span th:if="${branding.websiteUrl}"   th:text="${branding.websiteUrl}">website</span>
+        <span th:if="${branding.contactPhone}"> · <th:block th:text="${branding.contactPhone}">phone</th:block></span>
+        <span th:if="${branding.contactEmail}"> · <th:block th:text="${branding.contactEmail}">email</th:block></span>
+    </div>
+</body>
+</html>

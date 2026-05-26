@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------------- Brand CSS variables (default values; runtime-overridden) ----
+   These mirror the defaults from src/brand/branding.config.ts so the very first
+   render (before BrandingProvider mounts) is already styled correctly. */
+:root {
+  --brand-primary:        #4f46e5;
+  --brand-primary-fg:     #ffffff;
+  --brand-primary-soft:   #eef2ff;
+  --brand-primary-hover:  #4338ca;
+
+  --brand-accent:         #10b981;
+  --brand-accent-fg:      #ffffff;
+  --brand-accent-soft:    #ecfdf5;
+
+  --brand-radius:         0.625rem;
+}
+
+@layer base {
+  html, body {
+    height: 100%;
+  }
+  body {
+    font-feature-settings: 'cv11', 'ss01', 'ss03';
+    -webkit-font-smoothing: antialiased;
+    @apply bg-slate-50 text-slate-900 font-sans;
+  }
+  /* Tighten heading rhythm; the default Tailwind reset is too loose for SaaS dashboards. */
+  h1, h2, h3, h4 { @apply tracking-tight; }
+}
+
+@layer utilities {
+  /* Glass-morphism panels (used on AppShell topbar) */
+  .glass {
+    backdrop-filter: saturate(180%) blur(8px);
+    background: color-mix(in srgb, white 78%, transparent);
+  }
+
+  /* Shimmer skeleton */
+  .skeleton {
+    background: linear-gradient(90deg, rgb(241 245 249) 8%, rgb(226 232 240) 18%, rgb(241 245 249) 33%);
+    background-size: 1000px 100%;
+    @apply animate-shimmer rounded-brand;
+  }
+}
+
+/* Print: hide UI chrome marked `print:hidden`; ensure documents print on white. */
+@media print {
+  body { background: white !important; }
+  .no-print, .no-print * { display: none !important; }
+}

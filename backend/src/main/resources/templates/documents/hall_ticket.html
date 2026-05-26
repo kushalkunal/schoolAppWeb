@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8" />
+    <title>Hall Ticket</title>
+    <style th:inline="text">
+        :root { --brand-primary: [[${branding != null and branding.primaryColor != null and branding.primaryColor != '' ? branding.primaryColor : '#111111'}]]; }
+        @page { size: A4; margin: 16mm 14mm; }
+        body { font-family: "Helvetica", "Arial", sans-serif; color: #111; font-size: 11pt; line-height: 1.5; }
+        .ticket { border: 2px solid var(--brand-primary); padding: 16px; }
+        .school-header { padding-bottom: 8px; border-bottom: 1px solid var(--brand-primary); margin-bottom: 12px; display: table; width: 100%; }
+        .school-header .logo-cell { display: table-cell; vertical-align: middle; width: 70px; }
+        .school-header .logo-cell img { max-width: 60px; max-height: 60px; }
+        .school-header .name-cell { display: table-cell; vertical-align: middle; text-align: center; }
+        .school-header h1 { margin: 0; font-size: 18pt; color: var(--brand-primary); }
+        .doc-title { text-align: center; font-size: 14pt; font-weight: bold; letter-spacing: 1.5px; margin: 10px 0; text-decoration: underline; color: var(--brand-primary); }
+        .grid { display: table; width: 100%; margin: 10px 0; }
+        .grid .row { display: table-row; }
+        .grid .col { display: table-cell; padding: 4px 8px; width: 50%; }
+        .label { color: #666; font-size: 9pt; text-transform: uppercase; }
+        .value { font-weight: bold; }
+        table.schedule { width: 100%; border-collapse: collapse; margin-top: 12px; }
+        table.schedule th, table.schedule td { border: 1px solid #999; padding: 6px; font-size: 10pt; text-align: center; }
+        table.schedule th { background: #f2f2f2; }
+        .instructions { margin-top: 16px; font-size: 9.5pt; }
+        .instructions h3 { font-size: 11pt; margin-bottom: 4px; }
+        .instructions ol { margin: 0 0 0 18px; }
+        .seat { float: right; border: 1px solid #111; padding: 6px 12px; font-weight: bold; }
+    </style>
+</head>
+<body>
+<div class="ticket">
+    <div class="school-header">
+        <div class="logo-cell">
+            <img th:if="${branding != null and branding.logoUrl != null and branding.logoUrl != ''}"
+                 th:src="${branding.logoUrl}" alt="logo" />
+        </div>
+        <div class="name-cell">
+            <h1 th:text="${school.name}">School Name</h1>
+            <p class="label">
+                <span th:text="${school.city}">City</span>, <span th:text="${school.state}">State</span>
+            </p>
+        </div>
+    </div>
+
+    <div class="doc-title">Hall Ticket — <span th:text="${exam.name}">Exam</span></div>
+
+    <span class="seat">Seat No.: <span th:text="${seatNumber ?: '—'}">001</span></span>
+
+    <div class="grid">
+        <div class="row">
+            <div class="col"><div class="label">Student</div><div class="value" th:text="${student.displayName}">—</div></div>
+            <div class="col"><div class="label">Adm. No.</div><div class="value" th:text="${student.admissionNumber ?: '—'}">—</div></div>
+        </div>
+        <div class="row">
+            <div class="col"><div class="label">Class / Section</div><div class="value" th:if="${enrollment}">[[${enrollment.className}]] [[${enrollment.sectionName}]]</div></div>
+            <div class="col"><div class="label">Roll No.</div><div class="value" th:text="${enrollment != null ? (enrollment.rollNumber ?: '—') : '—'}">—</div></div>
+        </div>
+        <div class="row">
+            <div class="col"><div class="label">Exam type</div><div class="value" th:text="${exam.examType}">TERM</div></div>
+            <div class="col"><div class="label">Dates</div><div class="value">
+                <span th:text="${exam.startDate != null ? #temporals.format(exam.startDate, 'dd MMM') : '—'}">—</span>
+                <span th:if="${exam.endDate}"> → <span th:text="${#temporals.format(exam.endDate, 'dd MMM yyyy')}">—</span></span>
+            </div></div>
+        </div>
+    </div>
+
+    <table class="schedule" th:if="${schedule != null and !schedule.isEmpty()}">
+        <thead><tr><th>Date</th><th>Subject</th><th>Time</th><th>Duration</th></tr></thead>
+        <tbody>
+            <tr th:each="row : ${schedule}">
+                <td th:text="${row.date}">—</td>
+                <td th:text="${row.subject}">—</td>
+                <td th:text="${row.time}">—</td>
+                <td th:text="${row.duration}">—</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="instructions">
+        <h3>Instructions</h3>
+        <ol>
+            <li>Carry this hall ticket and a valid ID to every exam.</li>
+            <li>Reach the venue at least 15 minutes before the start time.</li>
+            <li>Mobile phones and smart watches are prohibited inside the exam hall.</li>
+            <li>Use only blue / black ink. Pencils permitted only for diagrams.</li>
+            <li>Any malpractice will lead to immediate disqualification.</li>
+        </ol>
+    </div>
+
+    <div style="margin-top: 30px; text-align: right; font-size: 9pt; color: #555;">
+        Authorised by Principal · <span th:text="${school.name}">School</span>
+    </div>
+</div>
+</body>
+</html>

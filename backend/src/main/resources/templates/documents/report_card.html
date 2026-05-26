@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8" />
+    <title>Report Card</title>
+    <style th:inline="text">
+        :root { --brand-primary: [[${branding != null and branding.primaryColor != null and branding.primaryColor != '' ? branding.primaryColor : '#111111'}]]; }
+        @page { size: A4; margin: 16mm 14mm; }
+        body { font-family: "Helvetica", "Arial", sans-serif; color: #111; font-size: 10.5pt; line-height: 1.5; }
+        .school-header { padding-bottom: 10px; border-bottom: 3px double var(--brand-primary); margin-bottom: 12px; display: table; width: 100%; }
+        .school-header .logo-cell { display: table-cell; vertical-align: middle; width: 70px; }
+        .school-header .logo-cell img { max-width: 60px; max-height: 60px; }
+        .school-header .name-cell { display: table-cell; vertical-align: middle; text-align: center; }
+        .school-header h1 { margin: 0; font-size: 20pt; letter-spacing: 1.5px; color: var(--brand-primary); }
+        .muted { color: #555; font-size: 9pt; }
+        .doc-title { text-align: center; font-size: 14pt; font-weight: bold; margin: 12px 0; text-decoration: underline; }
+        .info-grid { display: table; width: 100%; margin: 10px 0 14px 0; border: 1px solid #999; }
+        .info-grid .row { display: table-row; }
+        .info-grid .cell { display: table-cell; padding: 6px 10px; border-bottom: 1px solid #e0e0e0; width: 25%; }
+        .info-grid .cell .label { font-size: 8.5pt; color: #555; }
+        .info-grid .cell .value { font-weight: bold; font-size: 10.5pt; }
+        table.marks { width: 100%; border-collapse: collapse; margin-top: 8px; }
+        table.marks th, table.marks td { border: 1px solid #999; padding: 5px 6px; font-size: 10pt; }
+        table.marks th { background: #f2f2f2; text-align: left; }
+        table.marks td.num { text-align: right; }
+        table.marks tr.total td { font-weight: bold; background: #f8f8f8; border-top: 2px solid #111; }
+        .summary { margin-top: 14px; display: table; width: 100%; border: 1px solid #999; }
+        .summary .cell { display: table-cell; padding: 8px; text-align: center; border-right: 1px solid #ddd; width: 25%; }
+        .summary .label { color: #555; font-size: 9pt; }
+        .summary .value { font-size: 14pt; font-weight: bold; }
+        .remarks { margin-top: 12px; border: 1px solid #999; padding: 8px; }
+        .remarks h4 { margin: 0 0 4px 0; font-size: 10pt; }
+        .signatures { margin-top: 36px; display: table; width: 100%; }
+        .signature { display: table-cell; text-align: center; font-size: 9pt; color: #555; padding-top: 6px; border-top: 1px solid #333; width: 33%; }
+    </style>
+</head>
+<body>
+    <div class="school-header">
+        <div class="logo-cell">
+            <img th:if="${branding != null and branding.logoUrl != null and branding.logoUrl != ''}"
+                 th:src="${branding.logoUrl}" alt="logo" />
+        </div>
+        <div class="name-cell">
+            <h1 th:text="${school.name}">School Name</h1>
+            <p class="muted">
+                <span th:text="${school.city}">City</span>,
+                <span th:text="${school.state}">State</span>
+                <span th:if="${school.board}"> · <span th:text="${school.board}">CBSE</span></span>
+            </p>
+        </div>
+    </div>
+
+    <div class="doc-title">
+        Report Card &nbsp;·&nbsp; <span th:text="${exam.name}">Exam Name</span>
+    </div>
+
+    <div class="info-grid">
+        <div class="row">
+            <div class="cell"><div class="label">Student</div><div class="value" th:text="${student.displayName}">—</div></div>
+            <div class="cell"><div class="label">Adm. No.</div><div class="value" th:text="${student.admissionNumber ?: '—'}">—</div></div>
+            <div class="cell"><div class="label">Class</div><div class="value" th:text="${enrollment != null ? enrollment.className : '—'}">—</div></div>
+            <div class="cell"><div class="label">Section</div><div class="value" th:text="${enrollment != null ? enrollment.sectionName : '—'}">—</div></div>
+        </div>
+        <div class="row">
+            <div class="cell"><div class="label">Roll No.</div><div class="value" th:text="${enrollment != null ? (enrollment.rollNumber ?: '—') : '—'}">—</div></div>
+            <div class="cell"><div class="label">Academic Year</div><div class="value" th:text="${academicYearName ?: '—'}">2025-2026</div></div>
+            <div class="cell"><div class="label">Exam Type</div><div class="value" th:text="${exam.examType}">TERM</div></div>
+            <div class="cell"><div class="label">Date Issued</div><div class="value" th:text="${#temporals.format(issueDate, 'dd MMM yyyy')}">—</div></div>
+        </div>
+    </div>
+
+    <table class="marks">
+        <thead>
+            <tr>
+                <th style="width:35%;">Subject</th>
+                <th class="num" style="width:13%;">Max</th>
+                <th class="num" style="width:13%;">Obtained</th>
+                <th class="num" style="width:10%;">%</th>
+                <th style="width:9%;">Grade</th>
+                <th style="width:20%;">Remarks</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr th:each="row : ${subjectRows}">
+                <td>
+                    <span th:text="${row.subjectName}">Subject</span>
+                    <span th:if="${row.subjectCode}" class="muted"> · <th:block th:text="${row.subjectCode}">CODE</th:block></span>
+                </td>
+                <td class="num" th:text="${row.maxMarks}">0</td>
+                <td class="num">
+                    <span th:if="${row.absent}">AB</span>
+                    <span th:unless="${row.absent}" th:text="${row.obtainedMarks ?: '—'}">0</span>
+                </td>
+                <td class="num" th:text="${row.percentage != null ? row.percentage + '%' : '—'}">—</td>
+                <td th:text="${row.grade ?: '—'}">—</td>
+                <td th:text="${row.remarks ?: ''}"></td>
+            </tr>
+            <tr class="total">
+                <td>Total</td>
+                <td class="num" th:text="${totalMaxMarks}">0</td>
+                <td class="num" th:text="${totalObtainedMarks}">0</td>
+                <td class="num" th:text="${overallPercentage + '%'}">0%</td>
+                <td th:text="${overallGrade ?: '—'}">—</td>
+                <td></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="summary">
+        <div class="cell"><div class="label">Total</div><div class="value">[[${totalObtainedMarks}]] / [[${totalMaxMarks}]]</div></div>
+        <div class="cell"><div class="label">Percentage</div><div class="value" th:text="${overallPercentage + '%'}">0%</div></div>
+        <div class="cell"><div class="label">Grade</div><div class="value" th:text="${overallGrade ?: '—'}">—</div></div>
+        <div class="cell"><div class="label">Rank in Class</div><div class="value" th:text="${rankInClass ?: '—'}">—</div></div>
+    </div>
+
+    <div class="remarks" th:if="${classTeacherRemarks != null and !classTeacherRemarks.isEmpty()}">
+        <h4>Class teacher's remarks</h4>
+        <p th:text="${classTeacherRemarks}">—</p>
+    </div>
+
+    <div class="signatures">
+        <div class="signature">Class Teacher</div>
+        <div class="signature">Principal</div>
+        <div class="signature">Parent / Guardian</div>
+    </div>
+</body>
+</html>

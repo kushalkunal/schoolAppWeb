@@ -1,0 +1,47 @@
+# --- JVM / Maven ---
+**/target/
+*.class
+*.jar
+*.war
+*.log
+hs_err_pid*.log
+.mvn/wrapper/maven-wrapper.jar
+
+# --- Node / Next.js ---
+**/node_modules/
+**/.next/
+**/out/
+**/build/
+**/dist/
+**/coverage/
+**/.turbo/
+**/*.tsbuildinfo
+
+# --- Playwright ---
+**/test-results/
+**/playwright-report/
+**/playwright/.cache/
+
+# --- Env / secrets ---
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+!web/.env.local
+
+# --- Runtime artifacts ---
+backend/storage/
+backend/logs/
+*.pid
+
+# --- IDE / OS ---
+.idea/
+.vscode/
+.fleet/
+*.iml
+.DS_Store
+Thumbs.db
+
+# --- ocr-service mirrors backend ignores via globs above ---

@@ -1,0 +1,221 @@
+spring:
+  application:
+    name: school-management
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/schoolapp}
+    username: ${DATABASE_USER:schoolapp}
+    password: ${DATABASE_PASSWORD:schoolapp_dev_password}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      pool-name: schoolapp-hikari
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          batch_size: 50
+          time_zone: UTC
+        order_inserts: true
+        order_updates: true
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+
+  mail:
+    # These are consumed only when app.email.provider=SMTP. Leaving host blank in dev means
+    # Spring's MailSenderAutoConfiguration doesn't wire a JavaMailSender at all.
+    host: ${SMTP_HOST:}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${SMTP_AUTH:true}
+      mail.smtp.starttls.enable: ${SMTP_STARTTLS:true}
+
+  # Multipart upload limits — migration job images can be 1-page register photos
+  servlet:
+    multipart:
+      max-file-size: ${MAX_UPLOAD_SIZE:10MB}
+      max-request-size: ${MAX_UPLOAD_SIZE:10MB}
+
+  jackson:
+    default-property-inclusion: non_null
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+
+server:
+  port: ${SERVER_PORT:8080}
+  compression:
+    enabled: true
+    mime-types: application/json,text/html,text/plain
+  error:
+    include-message: always
+    include-binding-errors: never
+    include-stacktrace: never
+    include-exception: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # health/info: public; prometheus: scraped by ops
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: never
+    prometheus:
+      access: read_only
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      slo:
+        http.server.requests: 50ms, 100ms, 250ms, 500ms, 1s
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  # Slice 9b — OpenTelemetry tracing. Sampling defaults to 0.1 (10%) so prod doesn't pay
+  # full ingest cost; dev profile overrides to 1.0. Set the OTLP endpoint to ship spans to
+  # a collector (Jaeger / Tempo / Honeycomb / Datadog). Leave blank to no-op.
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLE_RATE:0.1}
+  otlp:
+    tracing:
+      # When OTLP_ENDPOINT is unset (typical dev/test), explicitly opt out so Spring Boot
+      # doesn't try to instantiate the HTTP exporter with a blank URL (Slice 9b regression).
+      export:
+        enabled: ${OTLP_TRACING_ENABLED:false}
+      endpoint: ${OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:dev-only-change-me-dev-only-change-me-dev-only-change-me-123456}
+    access-token-expiry-minutes: ${JWT_ACCESS_TOKEN_EXPIRY_MINUTES:15}
+    refresh-token-expiry-days: ${JWT_REFRESH_TOKEN_EXPIRY_DAYS:7}
+  otp:
+    ttl-minutes: ${OTP_TTL_MINUTES:5}
+    max-verify-attempts: ${OTP_MAX_ATTEMPTS:3}
+    max-sends-per-window: ${OTP_MAX_SENDS:3}
+    rate-limit-window-minutes: ${OTP_RATE_LIMIT_WINDOW_MINUTES:10}
+    hmac-secret: ${OTP_HMAC_SECRET:dev-only-otp-hmac-secret-change-me-in-prod-xyz}
+  signup:
+    # PHONE | EMAIL | BOTH. Controls which identifier(s) can sign up a new tenant and log in.
+    # Default BOTH so the UI can offer the user a choice (phone OR email) at signup + login.
+    channel: ${SIGNUP_CHANNEL:BOTH}
+
+  billing:
+    # SaaS subscription defaults — Slice 1 (per-tenant feature flags + plans).
+    # Plan codes defined by Flyway V6: FREE, STARTER, GROWTH, ENTERPRISE.
+    trial-days: ${BILLING_TRIAL_DAYS:14}
+    default-plan-code: ${BILLING_DEFAULT_PLAN:FREE}
+    # Days a subscription stays in PAST_DUE before the grace-period scheduler flips it
+    # to SUSPENDED (slice 8b). Blank/unset = no auto-suspension.
+    grace-days: ${BILLING_GRACE_DAYS:7}
+    # Stripe Billing (SaaS subscriptions for the platform itself) — webhook secret from
+    # the Stripe dashboard. When set, /webhooks/stripe-billing endpoint mounts.
+    # Distinct from app.payment.stripe.webhook-secret which is per-school fee collection.
+    stripe:
+      # Leave UNSET (not empty) when no Stripe billing is configured so the conditional
+      # @ConditionalOnProperty on the webhook controller correctly skips it. SpEL #{null}
+      # makes Spring see this as truly absent rather than "".
+      webhook-secret: ${STRIPE_BILLING_WEBHOOK_SECRET:#{null}}
+
+  tenantconfig:
+    # Slice 2: AES-GCM-256 key for encrypting sensitive fields inside
+    # tenant_provider_configs.config at rest. SHA-256 derived to a fixed-size key, so any
+    # >=16-char input works; production should use a 32+ char random value or a KMS-issued
+    # secret. Rotating this key requires re-encrypting existing rows — not yet automated.
+    encryption-key: ${TENANT_CONFIG_KEY:dev-only-tenantconfig-key-CHANGE-ME-IN-PROD}
+
+  whatsapp:
+    # LOGGING (default) logs messages to stdout. WATI activates the real HTTP client.
+    provider: ${WHATSAPP_PROVIDER:LOGGING}
+    wati:
+      # e.g. https://live-mt-server.wati.io/<accountId>
+      base-url: ${WATI_BASE_URL:}
+      token: ${WATI_TOKEN:}
+    # HMAC-SHA256 secret used to verify incoming delivery-status webhooks from the BSP
+    webhook-secret: ${WHATSAPP_WEBHOOK_SECRET:dev-webhook-secret-replace-me}
+
+  email:
+    # LOGGING (default) logs emails to stdout. SMTP delegates to Spring's JavaMailSender —
+    # requires spring.mail.host / username / password below.
+    provider: ${EMAIL_PROVIDER:LOGGING}
+    from: ${EMAIL_FROM:noreply@schoolapp.in}
+
+  storage:
+    # LOCAL (default) writes to disk under base-dir and serves via the /files/** HTTP endpoint.
+    # S3 works with any S3-compatible provider — Cloudflare R2 (10 GB free + zero egress),
+    # Backblaze B2 (10 GB free + 1 GB/day egress), MinIO self-hosted, AWS S3, DO Spaces, Wasabi.
+    provider: ${STORAGE_PROVIDER:LOCAL}
+    presign-ttl-minutes: ${STORAGE_PRESIGN_TTL_MINUTES:10080}   # 7 days (S3 maximum)
+    local:
+      base-dir: ${STORAGE_LOCAL_DIR:./storage}
+      # Defaults match the SERVER_PORT default. Override via STORAGE_LOCAL_URL when running on
+      # a non-default port so receipt / hall-ticket PDF links resolve correctly in templates.
+      public-base-url: ${STORAGE_LOCAL_URL:http://localhost:${server.port:8080}/files}
+    s3:
+      endpoint: ${S3_ENDPOINT:}               # https://<acct>.r2.cloudflarestorage.com for R2
+      region: ${S3_REGION:auto}               # "auto" for R2; "us-east-1" for AWS; etc.
+      # When provider=LOCAL these are still bind-validated by @NotBlank, so we supply harmless
+      # placeholders. Real values come from env vars only when provider=S3.
+      bucket: ${S3_BUCKET:placeholder-bucket}
+      access-key-id: ${S3_ACCESS_KEY_ID:placeholder-key}
+      secret-access-key: ${S3_SECRET_ACCESS_KEY:placeholder-secret}
+      public-base-url: ${S3_PUBLIC_BASE_URL:} # set only if the bucket is public
+      force-path-style: ${S3_FORCE_PATH_STYLE:false}
+
+  payment:
+    # LOGGING (default) generates a deterministic fake URL. STRIPE | RAZORPAY activate real
+    # HTTP clients — set provider AND the matching credentials below.
+    provider: ${PAYMENT_PROVIDER:LOGGING}
+    default-currency: ${PAYMENT_DEFAULT_CURRENCY:INR}
+    return-url: ${PAYMENT_RETURN_URL:https://app.schoolapp.in/payment/success}
+    stripe:
+      secret-key: ${STRIPE_SECRET_KEY:}
+      webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+    razorpay:
+      key-id: ${RAZORPAY_KEY_ID:}
+      key-secret: ${RAZORPAY_KEY_SECRET:}
+      webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:}
+
+  migration:
+    # Slice 5: OCR + LLM extraction moved to the ocr-service microservice. Configure that
+    # service's host here. The OCR provider + LLM provider env vars (OCR_PROVIDER,
+    # GOOGLE_VISION_API_KEY, LLM_PROVIDER, OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY)
+    # are now read by the ocr-service module — see ocr-service/src/main/resources/application.yml.
+    service:
+      base-url: ${OCR_SERVICE_URL:http://localhost:8090}
+
+logging:
+  level:
+    root: INFO
+    in.schoolapp: ${APP_LOG_LEVEL:DEBUG}
+    org.springframework.security: INFO
+    org.hibernate.SQL: INFO
