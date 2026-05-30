@@ -1,5 +1,6 @@
 package in.schoolapp.school.dto;
 
+import in.schoolapp.common.PiiMasking;
 import in.schoolapp.school.entity.Staff;
 import in.schoolapp.school.entity.StaffRole;
 
@@ -27,8 +28,8 @@ public record StaffResponse(
             s.getFirstName(),
             s.getLastName(),
             s.displayName(),
-            s.getPhone(),
-            s.getEmail(),
+            PiiMasking.phone(s.getPhone()),
+            PiiMasking.email(s.getEmail()),
             s.getGender(),
             s.getDateOfJoining(),
             s.getRole(),

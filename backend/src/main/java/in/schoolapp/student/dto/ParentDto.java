@@ -1,5 +1,6 @@
 package in.schoolapp.student.dto;
 
+import in.schoolapp.common.PiiMasking;
 import in.schoolapp.student.entity.Parent;
 import in.schoolapp.student.entity.ParentRelation;
 
@@ -18,8 +19,8 @@ public record ParentDto(
         return new ParentDto(
             p.getId(),
             p.getName(),
-            p.getPhone(),
-            p.getEmail(),
+            PiiMasking.phone(p.getPhone()),
+            PiiMasking.email(p.getEmail()),
             p.getRelationType(),
             relation,
             primary
