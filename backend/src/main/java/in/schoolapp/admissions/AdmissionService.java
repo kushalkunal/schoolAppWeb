@@ -18,10 +18,13 @@ import in.schoolapp.school.ClassSectionService;
 import in.schoolapp.school.dto.ClassResponse;
 import in.schoolapp.school.dto.SectionResponse;
 import in.schoolapp.school.entity.School;
+import in.schoolapp.school.entity.Section;
 import in.schoolapp.school.repository.SchoolRepository;
 import in.schoolapp.student.StudentService;
 import in.schoolapp.student.dto.CreateStudentRequest;
 import in.schoolapp.student.dto.StudentResponse;
+import in.schoolapp.student.entity.EnrollmentStatus;
+import in.schoolapp.student.repository.StudentEnrollmentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -52,6 +55,7 @@ public class AdmissionService {
     private final SchoolRepository schoolRepository;
     private final StudentService studentService;
     private final ClassSectionService classSectionService;
+    private final StudentEnrollmentRepository enrollmentRepository;
 
     /** Public entrypoint — no tenant context; the school is identified by phone/email/path. */
     @Transactional
@@ -59,6 +63,14 @@ public class AdmissionService {
         // Confirm the tenant actually exists (otherwise we'd leak via 201s).
         School school = schoolRepository.findById(schoolId)
             .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "School not found"));
+
+        // Duplicate detection (#14): block a second live application for the same child + contact.
+        if (req.parentPhone() != null && req.studentFirstName() != null
+            && admissionRepository.countActiveDuplicates(school.getId(), req.parentPhone(),
+                req.studentFirstName(), List.of(AdmissionStatus.REJECTED, AdmissionStatus.DECLINED)) > 0) {
+            throw new AppException(ErrorCode.DUPLICATE_ADMISSION,
+                "An application already exists for this child and contact. Continue with the existing one.");
+        }
 
         Admission a = new Admission();
         a.setSchoolId(school.getId());
@@ -183,6 +195,16 @@ public class AdmissionService {
     @Transactional
     public AdmissionResponse enrollStudent(UUID tenantId, UUID admissionId, UUID sectionId) {
         Admission a = getOrThrow(tenantId, admissionId);
+
+        // Capacity gate (#14): never enroll beyond the section's sanctioned strength.
+        Section section = classSectionService.getSectionOrThrow(tenantId, sectionId);
+        int max = section.getMaxStrength() != null ? section.getMaxStrength() : Integer.MAX_VALUE;
+        long active = enrollmentRepository.countBySectionIdAndStatus(sectionId, EnrollmentStatus.ACTIVE);
+        if (active >= max) {
+            throw new AppException(ErrorCode.SECTION_FULL,
+                "Section is at capacity (" + active + "/" + max + "). Pick another section or raise its limit.");
+        }
+
         transition(a, AdmissionStatus.ENROLLED);
 
         CreateStudentRequest req = new CreateStudentRequest(

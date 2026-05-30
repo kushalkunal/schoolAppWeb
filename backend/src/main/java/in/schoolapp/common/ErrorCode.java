@@ -42,6 +42,9 @@ public enum ErrorCode {
     STUDENT_NOT_FOUND(HttpStatus.NOT_FOUND),
     DUPLICATE_ADMISSION_NUMBER(HttpStatus.CONFLICT),
     PARENT_NOT_FOUND(HttpStatus.NOT_FOUND),
+    // Admissions (#14): section at capacity / a duplicate active application for the same child.
+    SECTION_FULL(HttpStatus.CONFLICT),
+    DUPLICATE_ADMISSION(HttpStatus.CONFLICT),
     // Visitor is not a registered guardian for the student they're collecting (audit #16).
     PICKUP_NOT_AUTHORIZED(HttpStatus.FORBIDDEN),
 
