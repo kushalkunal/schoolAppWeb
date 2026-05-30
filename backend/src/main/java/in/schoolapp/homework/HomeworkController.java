@@ -52,6 +52,7 @@ public class HomeworkController {
     }
 
     @PostMapping("/submissions")
+    @PreAuthorize(AppRoles.ANY_TEACHER)   // audit #4: was unguarded (any authenticated user could submit)
     public ResponseEntity<ApiResponse<SubmissionDto>> submit(@PathVariable UUID tenantId,
                                                               @Valid @RequestBody SubmissionDto req) {
         return ResponseEntity.status(HttpStatus.CREATED)
