@@ -79,6 +79,12 @@ public enum ErrorCode {
     // Subscription is SUSPENDED or CANCELLED — mutating endpoints blocked. Reads still work.
     TENANT_SUSPENDED(HttpStatus.FORBIDDEN),
 
+    // ---------- Approvals (maker-checker) ----------
+    APPROVAL_NOT_FOUND(HttpStatus.NOT_FOUND),
+    APPROVAL_NOT_PENDING(HttpStatus.CONFLICT),
+    // Maker == checker: the requester may not approve their own request (segregation of duties).
+    APPROVAL_SELF_NOT_ALLOWED(HttpStatus.FORBIDDEN),
+
     // ---------- General ----------
     RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND),
     RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS),

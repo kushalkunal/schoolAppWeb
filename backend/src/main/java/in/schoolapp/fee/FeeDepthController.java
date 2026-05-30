@@ -1,13 +1,19 @@
 package in.schoolapp.fee;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import in.schoolapp.approval.ApprovalService;
+import in.schoolapp.approval.dto.ApprovalRequestResponse;
+import in.schoolapp.approval.entity.ApprovalType;
 import in.schoolapp.auth.AppRoles;
 import in.schoolapp.common.ApiResponse;
+import in.schoolapp.common.AppException;
+import in.schoolapp.common.ErrorCode;
 import in.schoolapp.fee.dto.CreateDiscountRequest;
 import in.schoolapp.fee.dto.DiscountResponse;
 import in.schoolapp.fee.dto.InstallmentPlanRequest;
 import in.schoolapp.fee.dto.InstallmentPlanResponse;
 import in.schoolapp.fee.dto.RefundRequest;
-import in.schoolapp.fee.dto.RefundResponse;
 import in.schoolapp.feature.FeatureKey;
 import in.schoolapp.feature.RequiresFeature;
 import jakarta.validation.Valid;
@@ -38,18 +44,20 @@ import java.util.UUID;
 public class FeeDepthController {
 
     private final FeeDiscountService discountService;
-    private final FeeRefundService refundService;
     private final FeeInstallmentService installmentService;
+    private final ApprovalService approvalService;
+    private final ObjectMapper objectMapper;
 
     // ---------------- Discounts ----------------
 
     @PostMapping("/fee-discounts")
     @PreAuthorize(AppRoles.OWNER_OR_ADMIN)
     @RequiresFeature(FeatureKey.FEE_DISCOUNTS)
-    public ResponseEntity<ApiResponse<DiscountResponse>> create(
+    public ResponseEntity<ApiResponse<ApprovalRequestResponse>> create(
         @PathVariable UUID tenantId,
         @Valid @RequestBody CreateDiscountRequest req
     ) {
+        // Returns a PENDING approval — the discount is staged inactive until a checker approves it.
         return ResponseEntity.status(HttpStatus.CREATED)
             .body(ApiResponse.success(discountService.create(tenantId, req)));
     }
@@ -79,13 +87,26 @@ public class FeeDepthController {
     @PostMapping("/fee-payments/{paymentId}/refund")
     @PreAuthorize(AppRoles.OWNER_OR_ADMIN)
     @RequiresFeature(FeatureKey.FEE_REFUNDS)
-    public ResponseEntity<ApiResponse<RefundResponse>> refund(
+    public ResponseEntity<ApiResponse<ApprovalRequestResponse>> refund(
         @PathVariable UUID tenantId,
         @PathVariable UUID paymentId,
         @Valid @RequestBody RefundRequest req
     ) {
+        // Stage for maker-checker approval; the money only moves once a checker approves.
+        long amount = req.amountPaise() != null ? req.amountPaise() : 0L;
+        var approval = approvalService.submit(tenantId, ApprovalType.FEE_REFUND, null,
+            serializeRefundPayload(paymentId, req), amount, "Refund for payment " + paymentId);
         return ResponseEntity.status(HttpStatus.CREATED)
-            .body(ApiResponse.success(refundService.refund(tenantId, paymentId, req)));
+            .body(ApiResponse.success(ApprovalRequestResponse.from(approval)));
+    }
+
+    private String serializeRefundPayload(UUID paymentId, RefundRequest req) {
+        try {
+            return objectMapper.writeValueAsString(
+                new FeeRefundApprovalHandler.RefundPayload(paymentId, req.amountPaise(), req.reason()));
+        } catch (JsonProcessingException e) {
+            throw new AppException(ErrorCode.INTERNAL_ERROR, "Could not stage refund request");
+        }
     }
 
     // ---------------- Installment plans ----------------

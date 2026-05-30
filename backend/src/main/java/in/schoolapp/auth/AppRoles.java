@@ -24,6 +24,9 @@ public final class AppRoles {
     // Common groupings — use these in @PreAuthorize expressions. Annotations can't use
     // concatenation, so the literal string is pre-built here.
     public static final String OWNER_OR_ADMIN = "hasAnyRole('SCHOOL_OWNER','PRINCIPAL','ADMIN')";
+    /** Narrower than {@link #OWNER_OR_ADMIN}: excludes ADMIN. Used as the checker gate for
+     *  maker-checker approvals so an ADMIN who requested a discount/refund cannot also approve it. */
+    public static final String OWNER_OR_PRINCIPAL = "hasAnyRole('SCHOOL_OWNER','PRINCIPAL')";
     public static final String ANY_TEACHER = "hasAnyRole('SCHOOL_OWNER','PRINCIPAL','ADMIN','CLASS_TEACHER','SUBJECT_TEACHER')";
     /** Every role that can be a staff member — use for self-service endpoints (own attendance, own leave). */
     public static final String ANY_STAFF = "hasAnyRole('SCHOOL_OWNER','PRINCIPAL','ADMIN','CLASS_TEACHER','SUBJECT_TEACHER','ACCOUNTANT','LIBRARIAN')";

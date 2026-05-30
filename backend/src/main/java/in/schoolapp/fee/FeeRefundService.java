@@ -2,7 +2,6 @@ package in.schoolapp.fee;
 
 import in.schoolapp.common.AppException;
 import in.schoolapp.common.ErrorCode;
-import in.schoolapp.fee.dto.RefundRequest;
 import in.schoolapp.fee.dto.RefundResponse;
 import in.schoolapp.fee.entity.FeeAdjustment;
 import in.schoolapp.fee.entity.FeeInvoice;
@@ -42,16 +41,22 @@ public class FeeRefundService {
     private final FeeInvoiceRepository invoiceRepository;
     private final FeeAdjustmentRepository adjustmentRepository;
 
+    /**
+     * Performs the actual reversal. Called only by {@link FeeRefundApprovalHandler} once a refund
+     * has been approved (maker-checker, audit fix #7) — never directly from the request path —
+     * and stamps {@code approvedById} onto the resulting {@link FeeAdjustment}.
+     */
     @Transactional
-    public RefundResponse refund(UUID tenantId, UUID paymentId, RefundRequest req) {
+    public RefundResponse executeRefund(UUID tenantId, UUID paymentId, Long amountPaise,
+                                        String reason, UUID approverId) {
         FeePayment payment = paymentRepository.findById(paymentId)
             .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Payment not found"));
         if (!payment.getSchoolId().equals(tenantId)) {
             throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Payment not found");
         }
 
-        long refundAmount = req.amountPaise() != null && req.amountPaise() > 0
-            ? req.amountPaise()
+        long refundAmount = amountPaise != null && amountPaise > 0
+            ? amountPaise
             : payment.getAmountPaise();  // full refund if amount not supplied
 
         long alreadyRefunded = adjustmentRepository.findByPaymentIdOrderByCreatedAtAsc(paymentId).stream()
@@ -85,7 +90,8 @@ public class FeeRefundService {
         adj.setPaymentId(payment.getId());
         adj.setAdjustmentType(FeeAdjustment.AdjustmentType.REFUND);
         adj.setAmountPaise(-refundAmount);
-        adj.setReason(req.reason() != null ? req.reason() : "Refund");
+        adj.setReason(reason != null ? reason : "Refund");
+        adj.setApprovedById(approverId);
         adj = adjustmentRepository.save(adj);
 
         log.info("Refund tenant={} payment={} amount={} reason=\"{}\"",

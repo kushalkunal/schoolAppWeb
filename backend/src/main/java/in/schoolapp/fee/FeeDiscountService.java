@@ -1,5 +1,8 @@
 package in.schoolapp.fee;
 
+import in.schoolapp.approval.ApprovalService;
+import in.schoolapp.approval.dto.ApprovalRequestResponse;
+import in.schoolapp.approval.entity.ApprovalType;
 import in.schoolapp.common.AppException;
 import in.schoolapp.common.ErrorCode;
 import in.schoolapp.fee.dto.CreateDiscountRequest;
@@ -35,9 +38,15 @@ public class FeeDiscountService {
 
     private final FeeDiscountRepository discountRepository;
     private final FeeInvoiceRepository invoiceRepository;
+    private final ApprovalService approvalService;
 
+    /**
+     * Stages a discount for maker-checker approval (audit fix #6). The {@link FeeDiscount} is
+     * persisted {@code active=false} so it is invisible to {@code findApplicable} until a different
+     * user approves the returned request; the {@link FeeDiscountApprovalHandler} then flips it live.
+     */
     @Transactional
-    public DiscountResponse create(UUID tenantId, CreateDiscountRequest req) {
+    public ApprovalRequestResponse create(UUID tenantId, CreateDiscountRequest req) {
         if ((req.percent() == null) == (req.fixedPaise() == null)) {
             throw new AppException(ErrorCode.VALIDATION_ERROR,
                 "Exactly one of percent or fixedPaise must be set");
@@ -52,10 +61,17 @@ public class FeeDiscountService {
         d.setValidFrom(req.validFrom() != null ? req.validFrom() : LocalDate.now());
         d.setValidUntil(req.validUntil());
         d.setReason(req.reason());
-        d.setActive(true);
+        d.setActive(false);   // inert until approved
         d = discountRepository.save(d);
-        log.info("Discount created tenant={} student={} type={}", tenantId, req.studentId(), req.discountType());
-        return DiscountResponse.from(d);
+
+        long amount = req.fixedPaise() != null ? req.fixedPaise() : 0L;
+        String summary = "Discount " + req.discountType() + " for student " + req.studentId()
+            + (req.percent() != null ? " (" + req.percent() + "%)" : " (₹" + (amount / 100) + ")");
+        var approval = approvalService.submit(
+            tenantId, ApprovalType.FEE_DISCOUNT, d.getId(), null, amount, summary);
+        log.info("Discount staged for approval tenant={} student={} type={} approvalId={}",
+            tenantId, req.studentId(), req.discountType(), approval.getId());
+        return ApprovalRequestResponse.from(approval);
     }
 
     public List<DiscountResponse> list(UUID tenantId, UUID studentId) {
