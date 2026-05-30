@@ -11,6 +11,8 @@ public record CreateVisitorRequest(
     @Size(max = 255) String purpose,
     UUID   hostStaffId,
     UUID   hostStudentId,
+    boolean studentPickup,
+    @Size(max = 500) String pickupOverrideReason,
     @Size(max = 40)  String badgeNumber,
     String photoUrl,
     String notes

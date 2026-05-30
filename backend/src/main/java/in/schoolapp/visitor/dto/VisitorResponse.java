@@ -8,6 +8,7 @@ import java.util.UUID;
 public record VisitorResponse(
     UUID id, String name, String phone, String purpose,
     UUID hostStaffId, UUID hostStudentId,
+    boolean studentPickup, Boolean pickupAuthorized,
     String badgeNumber, String photoUrl,
     OffsetDateTime inAt, OffsetDateTime outAt,
     String notes
@@ -16,6 +17,7 @@ public record VisitorResponse(
         return new VisitorResponse(
             v.getId(), v.getName(), v.getPhone(), v.getPurpose(),
             v.getHostStaffId(), v.getHostStudentId(),
+            v.isStudentPickup(), v.getPickupAuthorized(),
             v.getBadgeNumber(), v.getPhotoUrl(),
             v.getInAt(), v.getOutAt(),
             v.getNotes()

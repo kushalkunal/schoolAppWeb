@@ -42,6 +42,8 @@ public enum ErrorCode {
     STUDENT_NOT_FOUND(HttpStatus.NOT_FOUND),
     DUPLICATE_ADMISSION_NUMBER(HttpStatus.CONFLICT),
     PARENT_NOT_FOUND(HttpStatus.NOT_FOUND),
+    // Visitor is not a registered guardian for the student they're collecting (audit #16).
+    PICKUP_NOT_AUTHORIZED(HttpStatus.FORBIDDEN),
 
     // ---------- Attendance ----------
     ATTENDANCE_ALREADY_SUBMITTED(HttpStatus.CONFLICT),

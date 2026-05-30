@@ -38,6 +38,17 @@ public class Visitor {
     @Column(name = "host_student_id")
     private UUID hostStudentId;
 
+    /** True when this visit is to collect a student — triggers guardian authorization (audit #16). */
+    @Column(name = "student_pickup", nullable = false)
+    private boolean studentPickup = false;
+
+    /** null = not a pickup; true = matched a registered guardian; false = allowed via override. */
+    @Column(name = "pickup_authorized")
+    private Boolean pickupAuthorized;
+
+    @Column(name = "pickup_override_reason", columnDefinition = "TEXT")
+    private String pickupOverrideReason;
+
     @Column(name = "badge_number", length = 40)
     private String badgeNumber;
 
