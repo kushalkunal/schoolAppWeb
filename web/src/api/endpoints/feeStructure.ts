@@ -1,4 +1,4 @@
-import { apiClient, apiGet, apiPost, apiPut } from '@/api/client';
+import { apiClient, apiGet, apiPost, apiPut, apiDelete } from '@/api/client';
 import type { ImportResult } from '@/api/endpoints/imports';
 
 // ---------- Types ----------
@@ -149,6 +149,18 @@ export const feeStructureApi = {
 
   listFeeHeads(tenantId: string): Promise<FeeHeadResponse[]> {
     return apiGet(`/api/v1/tenants/${tenantId}/fee-heads`);
+  },
+
+  createFeeHead(tenantId: string, name: string): Promise<FeeHeadResponse> {
+    return apiPost(`/api/v1/tenants/${tenantId}/fee-heads`, { name });
+  },
+
+  updateFeeHead(tenantId: string, id: string, name: string): Promise<FeeHeadResponse> {
+    return apiPut(`/api/v1/tenants/${tenantId}/fee-heads/${id}`, { name });
+  },
+
+  deactivateFeeHead(tenantId: string, id: string): Promise<void> {
+    return apiDelete(`/api/v1/tenants/${tenantId}/fee-heads/${id}`);
   },
 
   currentAcademicYear(tenantId: string): Promise<CurrentAcademicYearResponse> {

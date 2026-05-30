@@ -17,7 +17,24 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: DEFAULT_BRANDING.schoolName,
   description: DEFAULT_BRANDING.tagline,
-  icons: [{ rel: 'icon', url: DEFAULT_BRANDING.faviconUrl }],
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: DEFAULT_BRANDING.schoolName,
+  },
+  formatDetection: { telephone: false },
+  icons: [
+    { rel: 'icon', url: DEFAULT_BRANDING.faviconUrl },
+    { rel: 'apple-touch-icon', url: '/brand/icon-192.png' },
+  ],
+};
+
+export const viewport = {
+  themeColor: '#4f46e5',
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

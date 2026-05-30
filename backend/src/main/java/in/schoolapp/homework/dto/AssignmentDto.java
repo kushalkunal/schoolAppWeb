@@ -16,10 +16,12 @@ public record AssignmentDto(
     @NotBlank String body,
     String attachmentUrl,
     LocalDate dueDate,
-    OffsetDateTime createdAt
+    OffsetDateTime createdAt,
+    UUID createdByStaffId
 ) {
     public static AssignmentDto from(HomeworkAssignment a) {
         return new AssignmentDto(a.getId(), a.getSectionId(), a.getSubjectId(),
-            a.getTitle(), a.getBody(), a.getAttachmentUrl(), a.getDueDate(), a.getCreatedAt());
+            a.getTitle(), a.getBody(), a.getAttachmentUrl(), a.getDueDate(), a.getCreatedAt(),
+            a.getCreatedByStaffId());
     }
 }

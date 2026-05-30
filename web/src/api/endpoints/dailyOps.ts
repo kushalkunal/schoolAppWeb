@@ -198,7 +198,7 @@ export const vaultApi = {
 // ============================ PTM ============================
 
 export interface PtmSlot {
-  id: string; teacherId: string; slotDate: string;
+  id: string; teacherId: string; sectionId: string | null; slotDate: string;
   startTime: string; endTime: string; capacity: number; bookedCount: number;
 }
 export interface PtmBooking {
@@ -207,7 +207,7 @@ export interface PtmBooking {
 }
 
 export const ptmApi = {
-  createSlot(tenantId: string, body: { teacherId: string; date: string; startTime: string; endTime: string; capacity: number }) {
+  createSlot(tenantId: string, body: { teacherId: string; sectionId?: string; date: string; startTime: string; endTime: string; capacity: number }) {
     return apiPost<PtmSlot>(`/api/v1/tenants/${tenantId}/ptm/slots`, body);
   },
   slots(tenantId: string, date: string): Promise<PtmSlot[]> {

@@ -67,63 +67,108 @@ function Inner() {
         description="Compare counted cash + receipts against the system-recorded payments." />
 
       <Card>
-        <CardBody className="space-y-3">
+        <CardBody className="space-y-4">
           <div className="flex items-center gap-3">
-            <label className="text-sm">Closing date:</label>
-            <input type="date" className="border border-slate-200 rounded px-2 py-1 text-sm"
+            <label className="text-sm font-medium">Closing date:</label>
+            <input type="date" className="border border-slate-200 rounded px-3 py-2 text-sm min-h-[44px]"
               value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
 
           {expectedQ.isLoading ? <Spinner /> : expectedQ.isError ? <ErrorBanner error={expectedQ.error} /> : (
-            <table className="w-full text-sm">
-              <thead className="text-xs text-slate-500 text-left">
-                <tr><th>Mode</th><th className="text-right">Expected</th><th className="text-right">Counted</th></tr>
-              </thead>
-              <tbody>
+            <>
+              {/* Mobile: stacked cards. Desktop: table */}
+              <div className="hidden sm:block">
+                <table className="w-full text-sm">
+                  <thead className="text-xs text-slate-500 text-left">
+                    <tr><th>Mode</th><th className="text-right">Expected</th><th className="text-right">Counted</th></tr>
+                  </thead>
+                  <tbody>
+                    {(['Cash', 'UPI / Online', 'Cheque / DD', 'Other'] as const).map((label, i) => {
+                      const expected = [expectedQ.data?.expectedCashPaise, expectedQ.data?.expectedUpiPaise, expectedQ.data?.expectedChequePaise, expectedQ.data?.expectedOtherPaise][i] ?? 0;
+                      const keys: (keyof CloseDrawerRequest)[] = ['countedCashPaise', 'countedUpiPaise', 'countedChequePaise', 'countedOtherPaise'];
+                      const k = keys[i]!;
+                      return (
+                        <tr key={label} className="border-t border-slate-100">
+                          <td className="py-2">{label}</td>
+                          <td className="text-right font-mono">{formatINR(expected)}</td>
+                          <td className="text-right">
+                            <input type="number" min={0} inputMode="decimal"
+                              className="w-32 text-right border border-slate-200 rounded px-2 py-1"
+                              value={(counted[k] as number) / 100 || ''}
+                              onChange={(e) => setCounted({ ...counted, [k]: Math.round(Number(e.target.value) * 100) })} />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    <tr className="border-t border-slate-200 font-semibold">
+                      <td className="py-2">Total</td>
+                      <td className="text-right font-mono">{formatINR(expectedQ.data?.totalPaise ?? 0)}</td>
+                      <td className="text-right font-mono">{formatINR(totalCounted)}</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2">Variance</td>
+                      <td colSpan={2} className={cn(
+                        'text-right font-mono font-semibold',
+                        variance === 0 ? 'text-emerald-600' : 'text-rose-600',
+                      )}>{formatINR(variance)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile stacked layout */}
+              <div className="sm:hidden space-y-3">
                 {(['Cash', 'UPI / Online', 'Cheque / DD', 'Other'] as const).map((label, i) => {
                   const expected = [expectedQ.data?.expectedCashPaise, expectedQ.data?.expectedUpiPaise, expectedQ.data?.expectedChequePaise, expectedQ.data?.expectedOtherPaise][i] ?? 0;
                   const keys: (keyof CloseDrawerRequest)[] = ['countedCashPaise', 'countedUpiPaise', 'countedChequePaise', 'countedOtherPaise'];
                   const k = keys[i]!;
                   return (
-                    <tr key={label} className="border-t border-slate-100">
-                      <td className="py-2">{label}</td>
-                      <td className="text-right font-mono">{formatINR(expected)}</td>
-                      <td className="text-right">
-                        <input type="number" min={0} className="w-32 text-right border border-slate-200 rounded px-2 py-1"
+                    <div key={label} className="rounded-brand border border-slate-200 p-3 space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium text-sm">{label}</span>
+                        <span className="text-sm text-slate-500">Expected: {formatINR(expected)}</span>
+                      </div>
+                      <div>
+                        <label className="text-xs text-slate-500 block mb-1">Counted amount (₹)</label>
+                        <input type="number" min={0} inputMode="decimal"
+                          className="w-full text-right border border-slate-200 rounded-brand px-3 py-2.5 text-base min-h-[44px]"
+                          placeholder="0"
                           value={(counted[k] as number) / 100 || ''}
                           onChange={(e) => setCounted({ ...counted, [k]: Math.round(Number(e.target.value) * 100) })} />
-                      </td>
-                    </tr>
+                      </div>
+                    </div>
                   );
                 })}
-                <tr className="border-t border-slate-200 font-semibold">
-                  <td className="py-2">Total</td>
-                  <td className="text-right font-mono">{formatINR(expectedQ.data?.totalPaise ?? 0)}</td>
-                  <td className="text-right font-mono">{formatINR(totalCounted)}</td>
-                </tr>
-                <tr>
-                  <td className="py-2">Variance</td>
-                  <td colSpan={2} className={cn(
-                    'text-right font-mono font-semibold',
-                    variance === 0 ? 'text-emerald-600' : 'text-rose-600',
-                  )}>{formatINR(variance)}</td>
-                </tr>
-              </tbody>
-            </table>
+                <div className="rounded-brand border border-slate-200 bg-slate-50 p-3 space-y-1">
+                  <div className="flex justify-between font-semibold text-sm">
+                    <span>Total</span>
+                    <div className="text-right">
+                      <div className="text-xs text-slate-500">Expected: {formatINR(expectedQ.data?.totalPaise ?? 0)}</div>
+                      <div>Counted: {formatINR(totalCounted)}</div>
+                    </div>
+                  </div>
+                  <div className="flex justify-between font-semibold">
+                    <span>Variance</span>
+                    <span className={cn('font-mono', variance === 0 ? 'text-emerald-600' : 'text-rose-600')}>
+                      {formatINR(variance)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </>
           )}
 
           <textarea
             placeholder="Notes (optional)"
-            className="w-full border border-slate-200 rounded p-2 text-sm"
+            className="w-full border border-slate-200 rounded-brand p-3 text-sm min-h-[80px]"
             rows={2}
             value={counted.notes ?? ''}
             onChange={(e) => setCounted({ ...counted, notes: e.target.value })}
           />
-          <div className="flex justify-end">
-            <Button onClick={() => closeMutation.mutate()} disabled={closeMutation.isPending}>
-              {closeMutation.isPending ? 'Closing…' : 'Close drawer'}
-            </Button>
-          </div>
+          <Button onClick={() => closeMutation.mutate()} disabled={closeMutation.isPending}
+            className="w-full sm:w-auto sm:self-end">
+            {closeMutation.isPending ? 'Closing…' : 'Close drawer'}
+          </Button>
         </CardBody>
       </Card>
 
@@ -133,28 +178,52 @@ function Inner() {
           {historyQ.isLoading ? <Spinner /> : (historyQ.data ?? []).length === 0 ? (
             <p className="text-sm text-slate-500">No closures yet.</p>
           ) : (
-            <table className="w-full text-sm">
-              <thead className="text-xs text-slate-500 text-left">
-                <tr><th>Date</th><th className="text-right">Expected</th><th className="text-right">Counted</th><th className="text-right">Variance</th><th>Notes</th></tr>
-              </thead>
-              <tbody>
+            <>
+              {/* Desktop table */}
+              <table className="hidden sm:table w-full text-sm">
+                <thead className="text-xs text-slate-500 text-left">
+                  <tr><th>Date</th><th className="text-right">Expected</th><th className="text-right">Counted</th><th className="text-right">Variance</th><th>Notes</th></tr>
+                </thead>
+                <tbody>
+                  {(historyQ.data ?? []).map((r) => {
+                    const expectedTotal = r.expectedCashPaise + r.expectedUpiPaise + r.expectedChequePaise + r.expectedOtherPaise;
+                    const countedTotal = r.countedCashPaise + r.countedUpiPaise + r.countedChequePaise + r.countedOtherPaise;
+                    return (
+                      <tr key={r.id} className="border-t border-slate-100">
+                        <td className="py-1.5">{r.closedOnDate}</td>
+                        <td className="text-right font-mono">{formatINR(expectedTotal)}</td>
+                        <td className="text-right font-mono">{formatINR(countedTotal)}</td>
+                        <td className={cn('text-right font-mono', r.variancePaise === 0 ? 'text-emerald-600' : 'text-rose-600')}>
+                          {formatINR(r.variancePaise)}
+                        </td>
+                        <td className="text-xs text-slate-500 truncate">{r.notes ?? '—'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {/* Mobile list */}
+              <div className="sm:hidden space-y-2">
                 {(historyQ.data ?? []).map((r) => {
                   const expectedTotal = r.expectedCashPaise + r.expectedUpiPaise + r.expectedChequePaise + r.expectedOtherPaise;
                   const countedTotal = r.countedCashPaise + r.countedUpiPaise + r.countedChequePaise + r.countedOtherPaise;
                   return (
-                    <tr key={r.id} className="border-t border-slate-100">
-                      <td className="py-1.5">{r.closedOnDate}</td>
-                      <td className="text-right font-mono">{formatINR(expectedTotal)}</td>
-                      <td className="text-right font-mono">{formatINR(countedTotal)}</td>
-                      <td className={cn('text-right font-mono', r.variancePaise === 0 ? 'text-emerald-600' : 'text-rose-600')}>
-                        {formatINR(r.variancePaise)}
-                      </td>
-                      <td className="text-xs text-slate-500 truncate">{r.notes ?? '—'}</td>
-                    </tr>
+                    <div key={r.id} className="rounded-brand border border-slate-200 p-3 text-sm">
+                      <div className="flex justify-between mb-1">
+                        <span className="font-medium">{r.closedOnDate}</span>
+                        <span className={cn('font-semibold font-mono', r.variancePaise === 0 ? 'text-emerald-600' : 'text-rose-600')}>
+                          {formatINR(r.variancePaise)}
+                        </span>
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        Expected {formatINR(expectedTotal)} · Counted {formatINR(countedTotal)}
+                        {r.notes && <> · {r.notes}</>}
+                      </div>
+                    </div>
                   );
                 })}
-              </tbody>
-            </table>
+              </div>
+            </>
           )}
         </CardBody>
       </Card>

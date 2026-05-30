@@ -9,6 +9,7 @@ interface AuthResponse {
   accessToken: string;
   refreshToken: string;
   expiresInSeconds: number;
+  mustResetPassword: boolean;
   user: {
     id: string;
     schoolId: string;
@@ -45,7 +46,7 @@ interface AuthContextValue {
   sendOtp: (input: SendOtpInput) => Promise<void>;
   loginWithOtp: (input: VerifyOtpInput) => Promise<JwtClaims>;
   /** Slice 35 — sign in with a previously-set password. */
-  loginWithPassword: (input: PasswordLoginInput) => Promise<JwtClaims>;
+  loginWithPassword: (input: PasswordLoginInput) => Promise<{ claims: JwtClaims; mustResetPassword: boolean }>;
   /** Slice 35 — set or change the caller's password (requires a fresh JWT from OTP). */
   setPassword: (newPassword: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -117,7 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return claims;
   }, []);
 
-  const loginWithPassword = useCallback(async (input: PasswordLoginInput): Promise<JwtClaims> => {
+  const loginWithPassword = useCallback(async (input: PasswordLoginInput): Promise<{ claims: JwtClaims; mustResetPassword: boolean }> => {
     const res = await apiClient.post('/api/v1/auth/password/login', input);
     const auth: AuthResponse = res.data.data;
     tokenStorage.write({
@@ -127,7 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     const claims = decodeJwt(auth.accessToken);
     setState({ status: 'authenticated', claims });
-    return claims;
+    return { claims, mustResetPassword: auth.mustResetPassword ?? false };
   }, []);
 
   const setPassword = useCallback(async (newPassword: string) => {

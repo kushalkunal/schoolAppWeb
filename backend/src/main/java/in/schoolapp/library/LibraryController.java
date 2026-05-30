@@ -30,7 +30,7 @@ public class LibraryController {
     private final LibraryService service;
 
     @PostMapping("/books")
-    @PreAuthorize(AppRoles.OWNER_OR_ADMIN)
+    @PreAuthorize(AppRoles.LIBRARY_WRITER)
     public ResponseEntity<ApiResponse<BookDto>> createBook(@PathVariable UUID tenantId,
                                                             @Valid @RequestBody BookDto req) {
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -43,14 +43,14 @@ public class LibraryController {
     }
 
     @DeleteMapping("/books/{bookId}")
-    @PreAuthorize(AppRoles.OWNER_OR_ADMIN)
+    @PreAuthorize(AppRoles.LIBRARY_WRITER)
     public ApiResponse<Void> deactivateBook(@PathVariable UUID tenantId, @PathVariable UUID bookId) {
         service.deactivateBook(tenantId, bookId);
         return ApiResponse.ok();
     }
 
     @PostMapping("/issues")
-    @PreAuthorize(AppRoles.OWNER_OR_ADMIN)
+    @PreAuthorize(AppRoles.LIBRARY_WRITER)
     public ResponseEntity<ApiResponse<IssueDto>> issue(@PathVariable UUID tenantId,
                                                        @RequestParam UUID bookId,
                                                        @RequestParam UUID studentId,
@@ -61,7 +61,7 @@ public class LibraryController {
     }
 
     @PostMapping("/issues/{issueId}/return")
-    @PreAuthorize(AppRoles.OWNER_OR_ADMIN)
+    @PreAuthorize(AppRoles.LIBRARY_WRITER)
     public ApiResponse<IssueDto> returnBook(@PathVariable UUID tenantId, @PathVariable UUID issueId) {
         return ApiResponse.success(service.returnBook(tenantId, issueId));
     }

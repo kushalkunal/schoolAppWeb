@@ -2,6 +2,7 @@ package in.schoolapp.attendance;
 
 import in.schoolapp.auth.AppRoles;
 import in.schoolapp.attendance.dto.AttendanceRecordResponse;
+import in.schoolapp.attendance.dto.AttendanceSectionResponse;
 import in.schoolapp.attendance.dto.AttendanceSubmitResponse;
 import in.schoolapp.attendance.dto.AttendanceSummaryResponse;
 import in.schoolapp.attendance.dto.ChronicAbsenteeResponse;
@@ -46,7 +47,7 @@ public class AttendanceController {
     }
 
     @GetMapping("/sections/{sectionId}/attendance")
-    public ApiResponse<List<AttendanceRecordResponse>> getSectionAttendance(
+    public ApiResponse<AttendanceSectionResponse> getSectionAttendance(
         @PathVariable UUID tenantId,
         @PathVariable UUID sectionId,
         @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date

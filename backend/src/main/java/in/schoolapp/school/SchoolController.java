@@ -2,14 +2,19 @@ package in.schoolapp.school;
 
 import in.schoolapp.auth.AppRoles;
 import in.schoolapp.common.ApiResponse;
+import in.schoolapp.common.TenantContext;
+import in.schoolapp.school.dto.AssignClassTeacherRequest;
 import in.schoolapp.school.dto.ClassResponse;
 import in.schoolapp.school.dto.CreateClassesRequest;
 import in.schoolapp.school.dto.CreateSchoolRequest;
+import in.schoolapp.school.dto.UpdateStaffRequest;
 import in.schoolapp.school.dto.CreateStaffRequest;
+import in.schoolapp.school.dto.InviteTeacherRequest;
 import in.schoolapp.school.dto.AcademicYearResponse;
 import in.schoolapp.school.dto.OnboardingStatusResponse;
 import in.schoolapp.school.dto.SchoolResponse;
 import in.schoolapp.school.dto.SchoolSignupResponse;
+import in.schoolapp.school.dto.SectionResponse;
 import in.schoolapp.school.dto.StaffResponse;
 import in.schoolapp.school.dto.UpdateSchoolRequest;
 import in.schoolapp.common.AppException;
@@ -22,6 +27,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -118,6 +124,32 @@ public class SchoolController {
         return ApiResponse.success(classSectionService.listClasses(tenantId));
     }
 
+    /**
+     * Assign a CLASS_TEACHER staff member as the class teacher of a specific section.
+     * Only ADMIN/PRINCIPAL/OWNER may call this — teachers cannot reassign themselves.
+     */
+    @PatchMapping("/{tenantId}/sections/{sectionId}/class-teacher")
+    @PreAuthorize(AppRoles.OWNER_OR_ADMIN)
+    public ApiResponse<SectionResponse> assignClassTeacher(
+        @PathVariable UUID tenantId,
+        @PathVariable UUID sectionId,
+        @Valid @RequestBody AssignClassTeacherRequest request
+    ) {
+        return ApiResponse.success(
+            classSectionService.assignClassTeacher(tenantId, sectionId, request.staffId()));
+    }
+
+    /**
+     * Returns only the sections where the authenticated staff member is the class teacher.
+     * CLASS_TEACHER role calls this on login to discover their assigned sections.
+     * ADMIN/PRINCIPAL callers receive an empty list (they use /classes instead).
+     */
+    @GetMapping("/{tenantId}/sections/mine")
+    public ApiResponse<List<SectionResponse>> myAssignedSections(@PathVariable UUID tenantId) {
+        UUID staffId = TenantContext.getStaffId();
+        return ApiResponse.success(classSectionService.getMyAssignedSections(tenantId, staffId));
+    }
+
     // ----- Academic years (read-only) -----
 
     /**
@@ -144,9 +176,41 @@ public class SchoolController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(staff));
     }
 
+    /**
+     * Invite a teacher by email. System generates a temp password and sends it via email.
+     * Teacher must change the password on first login (mustResetPassword=true in response).
+     */
+    @PostMapping("/{tenantId}/staff/invite-teacher")
+    @PreAuthorize(AppRoles.OWNER_OR_ADMIN)
+    public ResponseEntity<ApiResponse<StaffResponse>> inviteTeacher(
+        @PathVariable UUID tenantId,
+        @Valid @RequestBody InviteTeacherRequest request
+    ) {
+        StaffResponse staff = staffService.inviteTeacher(tenantId, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(staff));
+    }
+
     @GetMapping("/{tenantId}/staff")
     public ApiResponse<List<StaffResponse>> listStaff(@PathVariable UUID tenantId) {
         return ApiResponse.success(staffService.listStaff(tenantId));
+    }
+
+    @GetMapping("/{tenantId}/staff/{staffId}")
+    public ApiResponse<StaffResponse> getStaff(
+        @PathVariable UUID tenantId,
+        @PathVariable UUID staffId
+    ) {
+        return ApiResponse.success(staffService.getStaff(tenantId, staffId));
+    }
+
+    @PatchMapping("/{tenantId}/staff/{staffId}")
+    @PreAuthorize(AppRoles.OWNER_OR_ADMIN)
+    public ApiResponse<StaffResponse> updateStaff(
+        @PathVariable UUID tenantId,
+        @PathVariable UUID staffId,
+        @Valid @RequestBody UpdateStaffRequest request
+    ) {
+        return ApiResponse.success(staffService.updateStaff(tenantId, staffId, request));
     }
 
     @DeleteMapping("/{tenantId}/staff/{staffId}")

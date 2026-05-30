@@ -19,12 +19,16 @@ public final class AppRoles {
     public static final String CLASS_TEACHER = "CLASS_TEACHER";
     public static final String SUBJECT_TEACHER = "SUBJECT_TEACHER";
     public static final String ACCOUNTANT = "ACCOUNTANT";
+    public static final String LIBRARIAN = "LIBRARIAN";
 
     // Common groupings — use these in @PreAuthorize expressions. Annotations can't use
     // concatenation, so the literal string is pre-built here.
     public static final String OWNER_OR_ADMIN = "hasAnyRole('SCHOOL_OWNER','PRINCIPAL','ADMIN')";
     public static final String ANY_TEACHER = "hasAnyRole('SCHOOL_OWNER','PRINCIPAL','ADMIN','CLASS_TEACHER','SUBJECT_TEACHER')";
+    /** Every role that can be a staff member — use for self-service endpoints (own attendance, own leave). */
+    public static final String ANY_STAFF = "hasAnyRole('SCHOOL_OWNER','PRINCIPAL','ADMIN','CLASS_TEACHER','SUBJECT_TEACHER','ACCOUNTANT','LIBRARIAN')";
     public static final String FEE_WRITER = "hasAnyRole('SCHOOL_OWNER','PRINCIPAL','ADMIN','ACCOUNTANT')";
     public static final String ATTENDANCE_WRITER = "hasAnyRole('SCHOOL_OWNER','PRINCIPAL','ADMIN','CLASS_TEACHER')";
     public static final String MARKS_WRITER = "hasAnyRole('SCHOOL_OWNER','PRINCIPAL','ADMIN','CLASS_TEACHER','SUBJECT_TEACHER')";
+    public static final String LIBRARY_WRITER = "hasAnyRole('SCHOOL_OWNER','PRINCIPAL','ADMIN','LIBRARIAN')";
 }

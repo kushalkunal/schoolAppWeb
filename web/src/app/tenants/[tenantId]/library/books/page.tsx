@@ -15,7 +15,7 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { ErrorBanner } from '@/components/ui/ErrorBanner';
 import { useToast } from '@/components/ui/Toast';
 import { hasCode, isApiError } from '@/api/errors';
-import { OWNER_OR_ADMIN, RequireRole } from '@/auth/RequireRole';
+import { LIBRARY_WRITER, RequireRole } from '@/auth/RequireRole';
 
 export default function BooksPage() {
   const params = useParams();
@@ -76,7 +76,7 @@ export default function BooksPage() {
             className="pl-9 pr-3 py-2 rounded-brand border border-slate-300 text-sm w-full focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 transition"
           />
         </label>
-        <RequireRole roles={OWNER_OR_ADMIN}>
+        <RequireRole roles={LIBRARY_WRITER}>
           <Button className="ml-auto" onClick={() => setCreateOpen(true)}>
             <Plus size={14} /> Add book
           </Button>
@@ -94,7 +94,7 @@ export default function BooksPage() {
           title={search ? 'No books match your search' : 'No books yet'}
           description={search ? 'Try a different keyword.' : 'Add your first book to start the catalogue.'}
           action={!search && (
-            <RequireRole roles={OWNER_OR_ADMIN}>
+            <RequireRole roles={LIBRARY_WRITER}>
               <Button onClick={() => setCreateOpen(true)}><Plus size={14} /> Add book</Button>
             </RequireRole>
           )}
@@ -158,7 +158,7 @@ function BookRow({ book, onDelete }: { book: BookDto; onDelete: () => void }) {
         </Badge>
       </td>
       <td className="px-5 text-right">
-        <RequireRole roles={OWNER_OR_ADMIN}>
+        <RequireRole roles={LIBRARY_WRITER}>
           <button onClick={onDelete} className="text-slate-400 hover:text-danger p-1 rounded transition">
             <Trash2 size={14} />
           </button>

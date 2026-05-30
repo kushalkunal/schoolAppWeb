@@ -118,3 +118,8 @@ export async function apiDelete<T = void>(path: string): Promise<T> {
   const res = await apiClient.delete(path);
   return res.data.data as T;
 }
+
+export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
+  const res = await apiClient.patch(path, body);
+  return res.data.data as T;
+}

@@ -99,6 +99,13 @@ public class Staff {
     @Column(name = "locked_until")
     private OffsetDateTime lockedUntil;
 
+    /**
+     * Set to true when an admin pre-sets a temp password (teacher invite flow).
+     * Cleared to false once the teacher changes their own password.
+     */
+    @Column(name = "must_reset_password", nullable = false)
+    private boolean mustResetPassword = false;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;

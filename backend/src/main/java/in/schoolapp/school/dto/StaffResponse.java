@@ -3,6 +3,7 @@ package in.schoolapp.school.dto;
 import in.schoolapp.school.entity.Staff;
 import in.schoolapp.school.entity.StaffRole;
 
+import java.time.LocalDate;
 import java.util.UUID;
 
 public record StaffResponse(
@@ -13,8 +14,11 @@ public record StaffResponse(
     String displayName,
     String phone,
     String email,
+    String gender,
+    LocalDate dateOfJoining,
     StaffRole role,
-    boolean active
+    boolean active,
+    boolean mustResetPassword
 ) {
     public static StaffResponse from(Staff s) {
         return new StaffResponse(
@@ -25,8 +29,11 @@ public record StaffResponse(
             s.displayName(),
             s.getPhone(),
             s.getEmail(),
+            s.getGender(),
+            s.getDateOfJoining(),
             s.getRole(),
-            s.isActive()
+            s.isActive(),
+            s.isMustResetPassword()
         );
     }
 }

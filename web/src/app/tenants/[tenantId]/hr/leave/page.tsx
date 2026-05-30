@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Plus, Check, X, Plane, AlertCircle, ChevronDown, Calendar, MessageSquare,
+  TrendingDown, Shield, Edit2, Save,
 } from 'lucide-react';
 import { hrApi } from '@/api/endpoints/hr';
 import { schoolApi } from '@/api/endpoints/school';
@@ -18,10 +19,12 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { ErrorBanner } from '@/components/ui/ErrorBanner';
 import { useToast } from '@/components/ui/Toast';
 import { hasCode, isApiError } from '@/api/errors';
-import { OWNER_OR_ADMIN, RequireRole } from '@/auth/RequireRole';
+import { OWNER_OR_ADMIN, RequireRole, useHasRole } from '@/auth/RequireRole';
+import { useAuth } from '@/auth/AuthProvider';
 import { cn } from '@/lib/utils';
 import type {
-  LeaveApplicationRequest, LeaveApplicationResponse, LeaveStatus, LeaveType,
+  LeaveApplicationRequest, LeaveApplicationResponse, LeaveBalanceResponse,
+  LeaveStatus, LeaveType, UpdateLeaveBalanceRequest,
 } from '@/types/domain';
 
 const LEAVE_TYPES: LeaveType[] = ['CASUAL', 'SICK', 'EARNED', 'UNPAID', 'MATERNITY', 'PATERNITY', 'COMP_OFF', 'OTHER'];
@@ -38,6 +41,10 @@ export default function LeavePage() {
   const tenantId = typeof params.tenantId === 'string' ? params.tenantId : '';
   const qc = useQueryClient();
   const toast = useToast();
+  const isAdmin = useHasRole(...OWNER_OR_ADMIN);
+  const { state } = useAuth();
+  // sub = staffId UUID from JWT
+  const myStaffId = state.status === 'authenticated' ? state.claims.sub : '';
 
   const [applyOpen, setApplyOpen] = useState(false);
   const [filterStaffId, setFilterStaffId] = useState<string>('');
@@ -45,20 +52,44 @@ export default function LeavePage() {
   const staffQ = useQuery({
     queryKey: ['staff', tenantId],
     queryFn: () => schoolApi.listStaff(tenantId),
-    enabled: !!tenantId,
+    enabled: !!tenantId && isAdmin,
   });
 
   const pendingQ = useQuery({
     queryKey: ['leave', tenantId, 'pending'],
     queryFn: () => hrApi.pendingLeaves(tenantId),
-    enabled: !!tenantId,
+    enabled: !!tenantId && isAdmin,
     retry: false,
   });
 
   const filteredQ = useQuery({
     queryKey: ['leave', tenantId, 'staff', filterStaffId],
     queryFn: () => hrApi.staffLeaves(tenantId, filterStaffId),
-    enabled: !!tenantId && !!filterStaffId,
+    enabled: !!tenantId && !!filterStaffId && isAdmin,
+    retry: false,
+  });
+
+  // Non-admin teacher: their own leave history
+  const myLeavesQ = useQuery({
+    queryKey: ['leave', tenantId, 'staff', myStaffId],
+    queryFn: () => hrApi.staffLeaves(tenantId, myStaffId),
+    enabled: !!tenantId && !!myStaffId,
+    retry: false,
+  });
+
+  // Leave balances — for own view (all roles) and for admin viewing selected staff
+  const currentYear = new Date().getFullYear();
+  const myBalancesQ = useQuery({
+    queryKey: ['leave-balances', tenantId, myStaffId, currentYear],
+    queryFn: () => hrApi.listLeaveBalances(tenantId, myStaffId, currentYear),
+    enabled: !!tenantId && !!myStaffId,
+    retry: false,
+  });
+
+  const staffBalancesQ = useQuery({
+    queryKey: ['leave-balances', tenantId, filterStaffId, currentYear],
+    queryFn: () => hrApi.listLeaveBalances(tenantId, filterStaffId, currentYear),
+    enabled: !!tenantId && !!filterStaffId && isAdmin,
     retry: false,
   });
 
@@ -95,6 +126,75 @@ export default function LeavePage() {
         title="Leave management isn't enabled for your plan"
         description="Submit, approve and track staff leave with automatic balance updates."
       />
+    );
+  }
+
+  // ---- Non-admin: comprehensive leave dashboard ----
+  if (!isAdmin) {
+    return (
+      <div className="space-y-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold">My Leave</h1>
+            <p className="text-sm text-slate-500">
+              Your leave balances for {currentYear} and full application history.
+            </p>
+          </div>
+          <Button onClick={() => setApplyOpen(true)}>
+            <Plus size={14} /> Apply for leave
+          </Button>
+        </div>
+
+        {/* ---- Balance tiles ---- */}
+        {myBalancesQ.isLoading && <Skeleton className="h-28 rounded-brand" />}
+        {myBalancesQ.isError && (
+          <ErrorBanner error={myBalancesQ.error} onRetry={() => myBalancesQ.refetch()} />
+        )}
+        {myBalancesQ.data && myBalancesQ.data.length === 0 && (
+          <div className="rounded-brand border border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500 text-center">
+            No leave quotas configured yet — contact your administrator to set your entitlements.
+          </div>
+        )}
+        {myBalancesQ.data && myBalancesQ.data.length > 0 && (
+          <LeaveBalanceTiles balances={myBalancesQ.data} />
+        )}
+
+        {/* ---- History ---- */}
+        <Card padding="none" className="overflow-hidden">
+          <CardHeader>
+            <CardTitle>Leave history</CardTitle>
+            <CardDescription>All your leave requests — past and present</CardDescription>
+          </CardHeader>
+          {myLeavesQ.isLoading && <CardBody><Skeleton className="h-24" /></CardBody>}
+          {myLeavesQ.isError && (
+            <CardBody><ErrorBanner error={myLeavesQ.error} onRetry={() => myLeavesQ.refetch()} /></CardBody>
+          )}
+          {myLeavesQ.data && myLeavesQ.data.length === 0 && (
+            <CardBody>
+              <p className="text-sm text-slate-500 py-6 text-center">
+                You haven&apos;t applied for any leave yet.
+              </p>
+            </CardBody>
+          )}
+          {myLeavesQ.data && myLeavesQ.data.length > 0 && (
+            <ul className="divide-y divide-slate-100">
+              {myLeavesQ.data.map((leave) => (
+                <HistoryRow key={leave.id} leave={leave}
+                  onCancel={() => cancel.mutate(leave.id)} canCancel={leave.status === 'SUBMITTED'} />
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        <ApplyLeaveModal
+          open={applyOpen}
+          onClose={() => setApplyOpen(false)}
+          tenantId={tenantId}
+          staff={[]}
+          prefilledStaffId={myStaffId}
+          onSuccess={() => { myLeavesQ.refetch(); myBalancesQ.refetch(); }}
+        />
+      </div>
     );
   }
 
@@ -169,11 +269,23 @@ export default function LeavePage() {
 
       {/* Per-staff history */}
       {filterStaffId && (
-        <Card padding="none" className="overflow-hidden">
-          <CardHeader>
-            <CardTitle>{staffById.get(filterStaffId) ?? 'Staff'} — leave history</CardTitle>
-            <CardDescription>All applications, including cancelled and rejected</CardDescription>
-          </CardHeader>
+        <>
+          {/* Balance tiles for selected staff member */}
+          {staffBalancesQ.isLoading && <Skeleton className="h-28 rounded-brand" />}
+          {staffBalancesQ.data && staffBalancesQ.data.length > 0 && (
+            <LeaveBalanceTiles
+              balances={staffBalancesQ.data}
+              adminMode
+              tenantId={tenantId}
+              onBalanceUpdated={() => staffBalancesQ.refetch()}
+            />
+          )}
+
+          <Card padding="none" className="overflow-hidden">
+            <CardHeader>
+              <CardTitle>{staffById.get(filterStaffId) ?? 'Staff'} — leave history</CardTitle>
+              <CardDescription>All applications, including cancelled and rejected</CardDescription>
+            </CardHeader>
 
           {filteredQ.isLoading && <CardBody><Skeleton className="h-24" /></CardBody>}
           {filteredQ.data && filteredQ.data.length === 0 && (
@@ -189,6 +301,7 @@ export default function LeavePage() {
             </ul>
           )}
         </Card>
+        </>
       )}
 
       <ApplyLeaveModal
@@ -316,32 +429,47 @@ function prettyLeaveType(t: LeaveType): string {
 // ============================================================
 
 function ApplyLeaveModal({
-  open, onClose, tenantId, staff, onSuccess,
+  open, onClose, tenantId, staff, onSuccess, prefilledStaffId,
 }: {
   open: boolean; onClose: () => void; tenantId: string;
   staff: Array<{ id?: string | null; displayName: string; active: boolean }>;
   onSuccess: () => void;
+  prefilledStaffId?: string; // when set, staffId is locked and staff dropdown is hidden
 }) {
   const toast = useToast();
   const initial: LeaveApplicationRequest = {
-    staffId: '', leaveType: 'CASUAL', startDate: new Date().toISOString().slice(0, 10),
+    staffId: prefilledStaffId ?? '', leaveType: 'CASUAL',
+    startDate: new Date().toISOString().slice(0, 10),
     endDate: new Date().toISOString().slice(0, 10), days: 1, reason: '',
   };
   const [form, setForm] = useState(initial);
+  const [applyError, setApplyError] = useState<string | null>(null);
+
+  // Re-sync form staffId if prefilledStaffId changes (e.g. modal opens after auth loads)
+  const prevPrefilled = prefilledStaffId ?? '';
+  if (form.staffId !== prevPrefilled && prevPrefilled && !form.staffId) {
+    setForm((f) => ({ ...f, staffId: prevPrefilled }));
+  }
 
   const apply = useMutation({
     mutationFn: () => hrApi.submitLeave(tenantId, form),
     onSuccess: () => {
       toast.success('Leave application submitted');
+      setApplyError(null);
       onSuccess();
       onClose();
-      setForm(initial);
+      setForm({ ...initial, staffId: prefilledStaffId ?? '' });
     },
-    onError: (e) => toast.error(isApiError(e) ? e.message : 'Could not submit'),
+    onError: (e) => {
+      const msg = isApiError(e) ? e.message : 'Could not submit';
+      setApplyError(msg);
+      toast.error(msg);
+    },
   });
 
   // Auto-compute days when start/end change (inclusive whole-day count).
   const onDateChange = (field: 'startDate' | 'endDate', value: string) => {
+    setApplyError(null);
     const next = { ...form, [field]: value };
     const s = new Date(next.startDate);
     const e = new Date(next.endDate);
@@ -352,22 +480,31 @@ function ApplyLeaveModal({
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Apply for leave">
+    <Modal open={open} onClose={() => { setApplyError(null); onClose(); }} title="Apply for leave">
       <form onSubmit={(e) => { e.preventDefault(); apply.mutate(); }} className="space-y-3">
-        <label className="block">
-          <span className="text-xs font-medium text-slate-600 uppercase tracking-wide">Staff</span>
-          <select
-            required
-            value={form.staffId}
-            onChange={(e) => setForm({ ...form, staffId: e.target.value })}
-            className="mt-1.5 block w-full rounded-brand border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 transition"
-          >
-            <option value="">Select staff member</option>
-            {staff.filter((s) => s.active && s.id).map((s) => (
-              <option key={s.id} value={s.id!}>{s.displayName}</option>
-            ))}
-          </select>
-        </label>
+        {applyError && (
+          <div className="flex items-start gap-2 rounded-brand border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-700">
+            <AlertCircle size={15} className="mt-0.5 shrink-0" />
+            <span>{applyError}</span>
+          </div>
+        )}
+        {/* Show staff picker only for admins (prefilledStaffId absent → admin mode) */}
+        {!prefilledStaffId && (
+          <label className="block">
+            <span className="text-xs font-medium text-slate-600 uppercase tracking-wide">Staff</span>
+            <select
+              required
+              value={form.staffId}
+              onChange={(e) => setForm({ ...form, staffId: e.target.value })}
+              className="mt-1.5 block w-full rounded-brand border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 transition"
+            >
+              <option value="">Select staff member</option>
+              {staff.filter((s) => s.active && s.id).map((s) => (
+                <option key={s.id} value={s.id!}>{s.displayName}</option>
+              ))}
+            </select>
+          </label>
+        )}
 
         <label className="block">
           <span className="text-xs font-medium text-slate-600 uppercase tracking-wide">Leave type</span>
@@ -414,5 +551,131 @@ function ApplyLeaveModal({
         </div>
       </form>
     </Modal>
+  );
+}
+
+// ============================================================
+// Leave Balance Tiles
+// ============================================================
+
+const BALANCE_CONFIG: Record<LeaveType, { label: string; color: string }> = {
+  CASUAL:    { label: 'Casual',    color: 'bg-sky-50   border-sky-200   text-sky-700'  },
+  SICK:      { label: 'Sick',      color: 'bg-rose-50  border-rose-200  text-rose-700' },
+  EARNED:    { label: 'Earned',    color: 'bg-green-50 border-green-200 text-green-700'},
+  MATERNITY: { label: 'Maternity', color: 'bg-pink-50  border-pink-200  text-pink-700' },
+  PATERNITY: { label: 'Paternity', color: 'bg-purple-50 border-purple-200 text-purple-700'},
+  COMP_OFF:  { label: 'Comp-off',  color: 'bg-amber-50 border-amber-200 text-amber-700'},
+  UNPAID:    { label: 'Unpaid',    color: 'bg-slate-50 border-slate-200 text-slate-700'},
+  OTHER:     { label: 'Other',     color: 'bg-slate-50 border-slate-200 text-slate-700'},
+};
+
+function LeaveBalanceTiles({
+  balances, adminMode = false, tenantId, onBalanceUpdated,
+}: {
+  balances: LeaveBalanceResponse[];
+  adminMode?: boolean;
+  tenantId?: string;
+  onBalanceUpdated?: () => void;
+}) {
+  const toast = useToast();
+  // editingType tracks which leave type is being edited (admin only)
+  const [editingType, setEditingType] = useState<LeaveType | null>(null);
+  const [editValue, setEditValue] = useState<string>('');
+
+  const updateMutation = useMutation({
+    mutationFn: ({ balance, entitledDays }: { balance: LeaveBalanceResponse; entitledDays: number }) =>
+      hrApi.updateLeaveBalance(tenantId!, balance.staffId, balance.leaveType, { entitledDays }),
+    onSuccess: () => {
+      toast.success('Leave entitlement updated');
+      setEditingType(null);
+      onBalanceUpdated?.();
+    },
+    onError: (e) => toast.error(isApiError(e) ? e.message : 'Failed to update'),
+  });
+
+  // Only show leave types with entitlement > 0, or all for admins
+  const visible = adminMode ? balances : balances.filter((b) => b.entitledDays > 0);
+
+  return (
+    <div>
+      <h2 className="text-sm font-semibold text-slate-700 mb-2 uppercase tracking-wide">
+        Leave Balances — {new Date().getFullYear()}
+        {adminMode && <span className="ml-2 text-xs text-slate-400 normal-case font-normal">(click edit to change entitlement)</span>}
+      </h2>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        {visible.map((b) => {
+          const cfg = BALANCE_CONFIG[b.leaveType];
+          const isEditing = editingType === b.leaveType;
+          const pct = b.entitledDays > 0
+            ? Math.max(0, Math.round((b.remainingDays / b.entitledDays) * 100))
+            : 0;
+
+          return (
+            <div
+              key={b.id}
+              className={`rounded-brand border p-4 flex flex-col gap-1 ${cfg.color}`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wide">{cfg.label}</span>
+                {adminMode && !isEditing && (
+                  <button
+                    onClick={() => { setEditingType(b.leaveType); setEditValue(String(b.entitledDays)); }}
+                    className="opacity-60 hover:opacity-100 transition"
+                    title="Edit entitlement"
+                  >
+                    <Edit2 size={12} />
+                  </button>
+                )}
+              </div>
+
+              {isEditing ? (
+                <div className="flex items-center gap-1 mt-1">
+                  <input
+                    type="number"
+                    step="1"
+                    min="0"
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    className="w-16 rounded border border-current bg-white/60 px-1 py-0.5 text-sm focus:outline-none"
+                    autoFocus
+                  />
+                  <button
+                    onClick={() => updateMutation.mutate({ balance: b, entitledDays: Number(editValue) })}
+                    disabled={updateMutation.isPending}
+                    className="opacity-70 hover:opacity-100 transition"
+                    title="Save"
+                  >
+                    <Save size={12} />
+                  </button>
+                  <button onClick={() => setEditingType(null)} className="opacity-50 hover:opacity-100 transition">
+                    <X size={12} />
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-baseline gap-1 mt-1">
+                    <span className="text-2xl font-bold tabular-nums">{b.remainingDays}</span>
+                    <span className="text-xs opacity-60">/ {b.entitledDays} days</span>
+                  </div>
+                  <div className="text-[11px] opacity-70">{b.consumedDays} used · {pct}% available</div>
+                  {/* progress bar */}
+                  <div className="mt-2 h-1.5 rounded-full bg-black/10 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-current opacity-60 transition-all"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })}
+        {visible.length === 0 && (
+          <p className="col-span-full text-sm text-slate-500 py-4 text-center">
+            No leave balance data for this year yet.
+          </p>
+        )}
+      </div>
+    </div>
   );
 }

@@ -2,29 +2,30 @@
 
 import Link from 'next/link';
 import { useParams, usePathname } from 'next/navigation';
-import { CalendarCheck2, FileText, Plane, UserCog } from 'lucide-react';
+import { CalendarCheck2, FileText, Plane, School, UserCog } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { cn } from '@/lib/utils';
+import { useHasRole, OWNER_OR_ADMIN } from '@/auth/RequireRole';
 
 /**
  * Sub-shell for the HR module. Owns its own page header so individual sub-pages stay
- * focused on data + actions. The three tabs map to the three HR feature flags:
+ * focused on data + actions. Tabs:
  *   - Attendance  → STAFF_ATTENDANCE
  *   - Leave       → LEAVE_MANAGEMENT
  *   - Payroll     → PAYROLL
- *
- * Tabs render even when a sub-feature isn't on plan; the underlying page surfaces
- * FEATURE_DISABLED via the existing branded empty state.
+ *   - Teachers    → admin/principal only (staff management moved here from top nav)
  */
 export default function HrLayout({ children }: { children: React.ReactNode }) {
   const params = useParams();
   const pathname = usePathname() ?? '';
   const tenantId = typeof params.tenantId === 'string' ? params.tenantId : '';
+  const isAdmin = useHasRole(...OWNER_OR_ADMIN);
 
   const tabs = [
     { label: 'Attendance', href: `/tenants/${tenantId}/hr/attendance`, icon: CalendarCheck2 },
     { label: 'Leave',      href: `/tenants/${tenantId}/hr/leave`,      icon: Plane },
     { label: 'Payroll',    href: `/tenants/${tenantId}/hr/payroll`,    icon: FileText },
+    ...(isAdmin ? [{ label: 'Teachers', href: `/tenants/${tenantId}/hr/teachers`, icon: School }] : []),
   ];
 
   return (

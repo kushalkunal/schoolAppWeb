@@ -2,17 +2,21 @@ package in.schoolapp.attendance;
 
 import in.schoolapp.attendance.dto.AttendanceEntryDto;
 import in.schoolapp.attendance.dto.AttendanceRecordResponse;
+import in.schoolapp.attendance.dto.AttendanceSectionResponse;
 import in.schoolapp.attendance.dto.AttendanceSubmitResponse;
 import in.schoolapp.attendance.dto.SubmitAttendanceRequest;
 import in.schoolapp.attendance.entity.AttendanceRecord;
+import in.schoolapp.attendance.entity.AttendanceSectionLock;
 import in.schoolapp.attendance.entity.AttendanceStatus;
 import in.schoolapp.attendance.event.AttendanceSubmittedEvent;
 import in.schoolapp.attendance.repository.AttendanceRepository;
+import in.schoolapp.attendance.repository.AttendanceSectionLockRepository;
 import in.schoolapp.common.AppException;
 import in.schoolapp.common.ErrorCode;
 import in.schoolapp.common.TenantContext;
 import in.schoolapp.school.ClassSectionService;
 import in.schoolapp.school.entity.Section;
+import in.schoolapp.school.repository.StaffRepository;
 import in.schoolapp.student.entity.EnrollmentStatus;
 import in.schoolapp.student.entity.StudentEnrollment;
 import in.schoolapp.student.repository.StudentEnrollmentRepository;
@@ -22,11 +26,13 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -41,8 +47,10 @@ import java.util.UUID;
 public class AttendanceService {
 
     private final AttendanceRepository attendanceRepository;
+    private final AttendanceSectionLockRepository lockRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
     private final ClassSectionService classSectionService;
+    private final StaffRepository staffRepository;
     private final ApplicationEventPublisher events;
 
     @Transactional
@@ -52,6 +60,23 @@ public class AttendanceService {
         Section section = classSectionService.getSectionOrThrow(tenantId, sectionId);
         LocalDate date = req.date();
         UUID staffId = TenantContext.getStaffId();
+
+        // RBAC: a CLASS_TEACHER may only mark attendance for sections assigned to them.
+        // ADMIN / PRINCIPAL / SCHOOL_OWNER may mark any section.
+        String role = TenantContext.getRole();
+        boolean isPrincipalOrAdmin = "PRINCIPAL".equals(role) || "SCHOOL_OWNER".equals(role) || "ADMIN".equals(role);
+        if ("CLASS_TEACHER".equals(role)) {
+            if (!staffId.equals(section.getClassTeacherId())) {
+                throw new AppException(ErrorCode.SECTION_NOT_ASSIGNED,
+                    "You are not the class teacher of this section");
+            }
+        }
+
+        // Lock check: once a CLASS_TEACHER has submitted attendance, non-principal cannot re-submit.
+        if (!isPrincipalOrAdmin && lockRepository.existsBySectionIdAndDate(sectionId, date)) {
+            throw new AppException(ErrorCode.ATTENDANCE_ALREADY_SUBMITTED,
+                "Attendance for this section on " + date + " has already been submitted and is locked");
+        }
 
         // Snapshot of all ACTIVE enrollments in the section — set the baseline for defaults
         List<StudentEnrollment> roster = enrollmentRepository
@@ -120,6 +145,23 @@ public class AttendanceService {
         log.info("Attendance submitted tenantId={} sectionId={} date={} present={} absent={} late={}",
             tenantId, section.getId(), date, presentCount, absentCount, lateCount);
 
+        // Record the lock when the class teacher of this specific section submits.
+        // Principals/admins re-submitting do NOT re-lock (lock is already present or they intentionally override).
+        if ("CLASS_TEACHER".equals(role) && staffId.equals(section.getClassTeacherId())) {
+            AttendanceSectionLock lock = lockRepository
+                .findBySectionIdAndDate(sectionId, date)
+                .orElseGet(() -> {
+                    AttendanceSectionLock l = new AttendanceSectionLock();
+                    l.setSchoolId(tenantId);
+                    l.setSectionId(sectionId);
+                    l.setDate(date);
+                    return l;
+                });
+            lock.setSubmittedBy(staffId);
+            lock.setSubmittedAt(Instant.now());
+            lockRepository.save(lock);
+        }
+
         return new AttendanceSubmitResponse(
             date, section.getId(),
             upserted.size(), presentCount, absentCount, lateCount, halfCount, leaveCount,
@@ -153,14 +195,41 @@ public class AttendanceService {
     }
 
     @Transactional(readOnly = true)
-    public List<AttendanceRecordResponse> getSectionAttendance(
+    public AttendanceSectionResponse getSectionAttendance(
         UUID tenantId, UUID sectionId, LocalDate date
     ) {
-        classSectionService.getSectionOrThrow(tenantId, sectionId);
-        return attendanceRepository.findBySchoolIdAndSectionIdAndDate(tenantId, sectionId, date)
+        Section section = classSectionService.getSectionOrThrow(tenantId, sectionId);
+
+        // CLASS_TEACHER may only view their own section's attendance.
+        String role = TenantContext.getRole();
+        if ("CLASS_TEACHER".equals(role)) {
+            UUID staffId = TenantContext.getStaffId();
+            if (!staffId.equals(section.getClassTeacherId())) {
+                throw new AppException(ErrorCode.SECTION_NOT_ASSIGNED,
+                    "You are not the class teacher of this section");
+            }
+        }
+
+        List<AttendanceRecordResponse> records = attendanceRepository
+            .findBySchoolIdAndSectionIdAndDate(tenantId, sectionId, date)
             .stream()
             .map(AttendanceRecordResponse::from)
             .toList();
+
+        // Lock info
+        Optional<AttendanceSectionLock> lockOpt = lockRepository.findBySectionIdAndDate(sectionId, date);
+        boolean locked = lockOpt.isPresent();
+        String lockedByName = null;
+        Instant lockedAt = null;
+        if (locked) {
+            AttendanceSectionLock lock = lockOpt.get();
+            lockedAt = lock.getSubmittedAt();
+            lockedByName = staffRepository.findById(lock.getSubmittedBy())
+                .map(s -> s.getFirstName() + (s.getLastName() != null ? " " + s.getLastName() : ""))
+                .orElse("Unknown");
+        }
+
+        return new AttendanceSectionResponse(sectionId, date.toString(), locked, lockedByName, lockedAt, records);
     }
 
     @Transactional(readOnly = true)

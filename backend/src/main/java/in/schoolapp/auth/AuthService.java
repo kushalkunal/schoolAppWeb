@@ -93,6 +93,7 @@ public class AuthService {
         staff.setPasswordSetAt(OffsetDateTime.now());
         staff.setFailedLoginCount(0);
         staff.setLockedUntil(null);
+        staff.setMustResetPassword(false);   // teacher completed the forced-reset flow
         staffRepository.save(staff);
         log.info("Password set staffId={}", staffId);
     }
@@ -162,7 +163,8 @@ public class AuthService {
         long expiresIn = jwtProps.accessTokenExpiryMinutes() * 60L;
         log.info("Login successful staffId={} tenantId={} role={}",
             staff.getId(), staff.getSchoolId(), staff.getRole());
-        return new AuthResponse(accessToken, refreshToken, expiresIn, StaffResponse.from(staff));
+        return new AuthResponse(accessToken, refreshToken, expiresIn,
+            StaffResponse.from(staff), staff.isMustResetPassword());
     }
 
     private Identifier resolveIdentifier(String phone, String email) {

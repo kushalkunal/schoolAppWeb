@@ -22,13 +22,23 @@ import { ErrorBanner } from '@/components/ui/ErrorBanner';
 import { useToast } from '@/components/ui/Toast';
 import { hasCode, isApiError } from '@/api/errors';
 import { ANY_TEACHER, RequireRole } from '@/auth/RequireRole';
+import { useAuth } from '@/auth/AuthProvider';
+import { timetableApi } from '@/api/endpoints/timetable';
 import { cn } from '@/lib/utils';
+
+/** Convert JS Date.getDay() (0=Sun) to Java DayOfWeek (1=Mon … 7=Sun). */
+function jsDayToIso(d: number): number { return d === 0 ? 7 : d; }
 
 export default function HomeworkPage() {
   const params = useParams();
   const tenantId = typeof params.tenantId === 'string' ? params.tenantId : '';
   const qc = useQueryClient();
   const toast = useToast();
+  const { state } = useAuth();
+  const role = state.status === 'authenticated' ? state.claims.role : '';
+  const staffId = state.status === 'authenticated' ? state.claims.sub : '';
+  const isTeacher = role === 'CLASS_TEACHER' || role === 'SUBJECT_TEACHER';
+  const todayDow = jsDayToIso(new Date().getDay());
 
   const [sectionFilter, setSectionFilter] = useState<string>('');
   const [createOpen, setCreateOpen] = useState(false);
@@ -46,6 +56,24 @@ export default function HomeworkPage() {
     enabled: !!tenantId,
     retry: false,
   });
+
+  // For teachers: fetch today's timetable entries to determine which sections they teach today
+  const teacherTimetableQ = useQuery({
+    queryKey: ['timetable', 'teacher', tenantId, staffId],
+    queryFn: () => timetableApi.getTeacherTimetable(tenantId, staffId),
+    enabled: !!tenantId && isTeacher && !!staffId,
+  });
+
+  // Sections the teacher teaches TODAY (unique sectionIds from timetable entries for today's day)
+  const todaySectionIds = useMemo(() => {
+    if (!isTeacher || !teacherTimetableQ.data) return null;
+    const ids = new Set(
+      teacherTimetableQ.data
+        .filter((e) => e.dayOfWeek === todayDow)
+        .map((e) => e.sectionId)
+    );
+    return ids;
+  }, [isTeacher, teacherTimetableQ.data, todayDow]);
 
   const assignmentsQ = useQuery({
     queryKey: ['homework', tenantId, sectionFilter],
@@ -103,9 +131,13 @@ export default function HomeworkPage() {
         icon={<BookText size={18} />}
         actions={
           <RequireRole roles={ANY_TEACHER}>
-            <Button onClick={() => setCreateOpen(true)}>
-              <Plus size={14} /> Assign homework
-            </Button>
+            {isTeacher && todaySectionIds !== null && todaySectionIds.size === 0 ? (
+              <span className="text-xs text-slate-400 italic">No classes scheduled for today</span>
+            ) : (
+              <Button onClick={() => setCreateOpen(true)}>
+                <Plus size={14} /> Assign homework
+              </Button>
+            )}
           </RequireRole>
         }
       />
@@ -213,6 +245,7 @@ export default function HomeworkPage() {
         tenantId={tenantId}
         classes={classes.data ?? []}
         subjects={subjects.data ?? []}
+        todaySectionIds={todaySectionIds}
       />
 
       {viewingId && (
@@ -232,15 +265,16 @@ export default function HomeworkPage() {
 // ============================================================
 
 function CreateAssignmentModal({
-  open, onClose, tenantId, classes, subjects,
+  open, onClose, tenantId, classes, subjects, todaySectionIds,
 }: {
   open: boolean; onClose: () => void; tenantId: string;
   classes: Array<{ id: string; name: string; sections: Array<{ id: string; name: string }> }>;
   subjects: Array<{ id: string; name: string }>;
+  todaySectionIds: Set<string> | null;  // null = no restriction (admin/principal)
 }) {
   const qc = useQueryClient();
   const toast = useToast();
-  const initial = { sectionId: '', subjectId: '', title: '', body: '', dueDate: '', attachmentUrl: '' };
+  const initial = { sectionId: '', subjectId: '', title: '', body: '', dueDate: '' };
   const [form, setForm] = useState(initial);
 
   const create = useMutation({
@@ -250,7 +284,7 @@ function CreateAssignmentModal({
       title: form.title,
       body: form.body,
       dueDate: form.dueDate || undefined,
-      attachmentUrl: form.attachmentUrl || undefined,
+      // attachment intentionally omitted — text-only homework
     }),
     onSuccess: () => {
       toast.success('Assignment posted');
@@ -271,13 +305,20 @@ function CreateAssignmentModal({
             className="mt-1.5 block w-full rounded-brand border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 transition"
           >
             <option value="">Select a section</option>
-            {classes.map((c) => (
-              <optgroup key={c.id} label={c.name}>
-                {c.sections.map((s) => (
-                  <option key={s.id} value={s.id}>{c.name} — {s.name}</option>
-                ))}
-              </optgroup>
-            ))}
+            {classes.map((c) => {
+              // Filter sections to only those the teacher teaches today (if restriction set)
+              const allowedSections = todaySectionIds
+                ? c.sections.filter((s) => todaySectionIds.has(s.id))
+                : c.sections;
+              if (allowedSections.length === 0) return null;
+              return (
+                <optgroup key={c.id} label={c.name}>
+                  {allowedSections.map((s) => (
+                    <option key={s.id} value={s.id}>{c.name} — {s.name}</option>
+                  ))}
+                </optgroup>
+              );
+            })}
           </select>
         </label>
 
@@ -310,8 +351,6 @@ function CreateAssignmentModal({
           <Input type="date" label="Due date" value={form.dueDate}
                  onChange={(e) => setForm({ ...form, dueDate: e.target.value })}
                  min={new Date().toISOString().slice(0, 10)} />
-          <Input label="Attachment URL" placeholder="Optional" value={form.attachmentUrl}
-                 onChange={(e) => setForm({ ...form, attachmentUrl: e.target.value })} />
         </div>
 
         <div className="flex justify-end gap-2 pt-1">

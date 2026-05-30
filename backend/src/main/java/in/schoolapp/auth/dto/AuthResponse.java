@@ -6,5 +6,6 @@ public record AuthResponse(
     String accessToken,
     String refreshToken,
     long expiresInSeconds,
-    StaffResponse user
+    StaffResponse user,
+    boolean mustResetPassword
 ) {}

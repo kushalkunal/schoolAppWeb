@@ -77,11 +77,6 @@ public final class FeatureKey {
     // Acquisition
     public static final String ADMISSIONS_FUNNEL    = "ADMISSIONS_FUNNEL";
 
-    // Boarding / Ops
-    public static final String HOSTEL               = "HOSTEL";
-    public static final String CAFETERIA            = "CAFETERIA";
-    public static final String INVENTORY            = "INVENTORY";
-
     // AI
     public static final String AI_RISK_SCORING      = "AI_RISK_SCORING";
     public static final String AI_CHATBOT           = "AI_CHATBOT";
@@ -125,7 +120,6 @@ public final class FeatureKey {
     public static final String CASH_RECONCILIATION  = "CASH_RECONCILIATION";
     public static final String EXPENSE_TRACKING     = "EXPENSE_TRACKING";
     public static final String INCIDENT_LOG         = "INCIDENT_LOG";
-    public static final String INFIRMARY_LOG        = "INFIRMARY_LOG";
     public static final String STUDENT_DOCUMENT_VAULT = "STUDENT_DOCUMENT_VAULT";
     public static final String UNIFIED_INBOX        = "UNIFIED_INBOX";
     public static final String ALERTS_FEED          = "ALERTS_FEED";

@@ -54,6 +54,16 @@ public class StaffAttendance {
     @Column(name = "marked_by_id")
     private UUID markedById;
 
+    /** false = self-submitted by teacher, awaiting principal/admin approval. */
+    @Column(nullable = false)
+    private boolean approved = false;
+
+    @Column(name = "approved_by_id")
+    private UUID approvedById;
+
+    @Column(name = "approved_at")
+    private OffsetDateTime approvedAt;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;

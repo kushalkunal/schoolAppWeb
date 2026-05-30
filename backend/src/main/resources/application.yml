@@ -167,7 +167,7 @@ app:
     # LOGGING (default) logs emails to stdout. SMTP delegates to Spring's JavaMailSender —
     # requires spring.mail.host / username / password below.
     provider: ${EMAIL_PROVIDER:LOGGING}
-    from: ${EMAIL_FROM:noreply@schoolapp.in}
+    from: ${EMAIL_FROM:thekkdotin@gmail.com}
 
   storage:
     # LOCAL (default) writes to disk under base-dir and serves via the /files/** HTTP endpoint.

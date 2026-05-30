@@ -45,6 +45,7 @@ export interface OnboardingStatusResponse {
 export interface SectionResponse {
   id: string;
   classId: string;
+  className: string | null;
   name: string;
   classTeacherId: string | null;
   maxStrength: number | null;
@@ -61,6 +62,11 @@ export interface CreateClassesRequest {
   classes: { name: string; sections: string[]; sortOrder?: number }[];
 }
 
+/** Body for PATCH /sections/{sectionId}/class-teacher */
+export interface AssignClassTeacherRequest {
+  staffId: string;
+}
+
 // ---------- Staff ----------
 export interface StaffResponse {
   id: string;
@@ -70,8 +76,21 @@ export interface StaffResponse {
   displayName: string;
   phone: string | null;
   email: string | null;
+  gender: string | null;
+  dateOfJoining: string | null;
   role: StaffRole;
   active: boolean;
+  mustResetPassword: boolean;
+}
+
+export interface UpdateStaffRequest {
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  email?: string;
+  gender?: string;
+  dateOfJoining?: string;
+  role?: StaffRole;
 }
 
 export interface CreateStaffRequest {
@@ -80,6 +99,14 @@ export interface CreateStaffRequest {
   phone: string;
   email?: string;
   role: StaffRole;
+}
+
+export interface InviteTeacherRequest {
+  firstName: string;
+  lastName?: string;
+  email: string;
+  phone?: string;
+  role: 'CLASS_TEACHER' | 'SUBJECT_TEACHER' | 'LIBRARIAN';
 }
 
 // ---------- Student ----------
@@ -136,6 +163,80 @@ export interface StudentProfileResponse {
   siblings: StudentResponse[];
 }
 
+// ---------- Teacher Assignments ----------
+export interface TeacherAssignmentResponse {
+  id: string;
+  staffId: string;
+  subjectId: string;
+  sectionId: string;
+  academicYearId: string;
+  createdAt: string;
+}
+
+export interface CreateTeacherAssignmentRequest {
+  staffId: string;
+  subjectId: string;
+  sectionId: string;
+}
+
+// ---------- Timetable ----------
+export interface PeriodResponse {
+  id: string;
+  name: string;
+  startTime: string;
+  endTime: string;
+  sortOrder: number;
+  breakSlot: boolean;
+}
+
+export interface CreatePeriodRequest {
+  name: string;
+  startTime: string;
+  endTime: string;
+  sortOrder: number;
+  breakSlot: boolean;
+}
+
+export interface TimetableEntryResponse {
+  id: string | null;
+  sectionId: string;
+  periodId: string;
+  dayOfWeek: number;
+  subjectId: string | null;
+  teacherId: string | null;
+  note: string | null;
+}
+
+export interface UpsertTimetableEntryRequest {
+  id?: string;
+  sectionId: string;
+  periodId: string;
+  dayOfWeek: number;
+  subjectId?: string;
+  teacherId?: string;
+  note?: string;
+}
+
+// ---------- Timetable Substitutions ----------
+export interface SubstitutionResponse {
+  id: string;
+  sectionId: string;
+  periodId: string;
+  date: string;
+  absentTeacherId: string | null;
+  substituteTeacherId: string;
+  reason: string | null;
+}
+
+export interface AssignSubstitutionRequest {
+  sectionId: string;
+  periodId: string;
+  date: string;
+  absentTeacherId?: string;
+  substituteTeacherId: string;
+  reason?: string;
+}
+
 // ---------- Attendance ----------
 export interface AttendanceEntry {
   studentId: string;
@@ -158,6 +259,16 @@ export interface AttendanceRecordResponse {
   arrivalTime: string | null;
   note: string | null;
 }
+
+export interface AttendanceSectionResponse {
+  sectionId: string;
+  date: string;
+  locked: boolean;
+  lockedByName: string | null;
+  lockedAt: string | null;
+  records: AttendanceRecordResponse[];
+}
+
 
 export interface AttendanceSubmitResponse {
   date: string;
@@ -224,6 +335,47 @@ export interface FeeDashboardResponse {
   paymentsCollectedToday: number;
 }
 
+export interface InvoiceResponse {
+  id: string;
+  studentId: string;
+  feeHeadId: string | null;
+  amountDuePaise: number;
+  amountPaidPaise: number;
+  balancePaise: number;
+  dueDate: string | null;
+  status: 'PENDING' | 'PARTIAL' | 'PAID' | 'WAIVED';
+  openingBalance: boolean;
+  description: string | null;
+}
+
+export interface StudentFeeSummaryResponse {
+  studentId: string;
+  totalOutstandingPaise: number;
+  totalPaidPaise: number;
+  invoices: InvoiceResponse[];
+  recentPayments: PaymentResponse[];
+}
+
+export interface RecentPaymentRow {
+  paymentId: string;
+  studentId: string;
+  studentName: string;
+  amountPaise: number;
+  paymentMode: PaymentMode;
+  receiptNumber: string;
+  receiptPdfUrl: string | null;
+  paymentDate: string;
+}
+
+export interface ClassCollectionRow {
+  classId: string;
+  className: string;
+  collectedPaise: number;
+  paymentCount: number;
+  outstandingPaise: number;
+  studentCount: number;
+}
+
 export interface DefaulterResponse {
   studentId: string;
   studentName: string;
@@ -263,7 +415,11 @@ export interface CircularResponse {
 }
 
 // ---------- Academics ----------
-export type ExamType = 'UNIT_TEST' | 'TERM' | 'ANNUAL' | 'MOCK' | 'ACTIVITY';
+export type ExamType =
+  | 'UNIT_TEST' | 'MID_TERM' | 'FINAL_EXAM' | 'TERM' | 'ANNUAL'
+  | 'MOCK' | 'ACTIVITY' | 'PRACTICAL' | 'ASSESSMENT' | 'INTERNAL';
+
+export type ResultStatus = 'DRAFT' | 'READY' | 'PUBLISHED';
 
 export interface SubjectResponse {
   id: string;
@@ -280,6 +436,8 @@ export interface CreateExamRequest {
   examType: ExamType;
   startDate?: string;  // ISO yyyy-MM-dd
   endDate?: string;
+  classId?: string;
+  sectionId?: string;
 }
 
 export interface ExamResponse {
@@ -289,7 +447,10 @@ export interface ExamResponse {
   examType: ExamType;
   startDate: string | null;
   endDate: string | null;
+  classId: string | null;
+  sectionId: string | null;
   published: boolean;
+  resultStatus: ResultStatus;
 }
 
 export interface StudentRow {
@@ -352,6 +513,119 @@ export interface ExamCompletionStatusResponse {
   studentsWithAllMarks: number;
   studentsPending: number;
   percentComplete: number;
+}
+
+// ---- Exam Structure (marking scheme) ----
+export interface ExamStructureComponent {
+  id: string;
+  componentName: string;
+  maxMarks: number;
+  passingMarks: number | null;
+  sortOrder: number;
+}
+
+export interface ExamStructureResponse {
+  subjectId: string;
+  subjectName: string;
+  components: ExamStructureComponent[];
+  totalMax: number;
+}
+
+export interface ConfigureExamStructureRequest {
+  subjectId: string;
+  components: {
+    componentName: string;
+    maxMarks: number;
+    passingMarks?: number;
+    sortOrder: number;
+  }[];
+}
+
+// ---- Component Marks Entry ----
+export interface ComponentEntry {
+  configId: string;
+  componentName: string;
+  maxMarks: number;
+  passingMarks: number | null;
+  obtained: number | null;
+  absent: boolean;
+  draft: boolean;
+  remarks: string | null;
+}
+
+export interface SubjectEntry {
+  subjectId: string;
+  subjectName: string;
+  components: ComponentEntry[];
+}
+
+export interface ComponentMarksStudent {
+  studentId: string;
+  name: string;
+  rollNumber: number | null;
+  subjects: SubjectEntry[];
+}
+
+export interface ComponentMarksSheetResponse {
+  examId: string;
+  sectionId: string;
+  /** True when the class teacher has done "Submit All (Final)". Teachers cannot edit; Principal can override. */
+  locked: boolean;
+  lockedByName: string | null;
+  lockedAt: string | null;
+  /** True only when the current logged-in user IS the class teacher of this specific section. */
+  isOwnClassTeacher: boolean;
+  students: ComponentMarksStudent[];
+}
+
+export interface ComponentMarkEntryDto {
+  studentId: string;
+  configId: string;
+  obtained?: number | null;
+  absent: boolean;
+  remarks?: string;
+}
+
+export interface BulkComponentMarksRequest {
+  sectionId: string;
+  entries: ComponentMarkEntryDto[];
+  submitFinal: boolean;
+}
+
+// ---- Exam Results ----
+export interface ExamResultResponse {
+  id: string;
+  studentId: string;
+  studentName: string;
+  admissionNumber: string | null;
+  rollNumber: number | null;
+  sectionId: string;
+  totalMax: number;
+  totalObtained: number;
+  percentage: number;
+  grade: string | null;
+  rankInSection: number | null;
+  pass: boolean;
+  status: ResultStatus;
+  computedAt: string | null;
+  publishedAt: string | null;
+}
+
+// ---- Result Dashboard ----
+export interface ResultDashboardResponse {
+  examId: string;
+  examName: string;
+  sections: {
+    sectionId: string;
+    sectionName: string;
+    totalStudents: number;
+    passCount: number;
+    failCount: number;
+    passPercentage: number;
+    topper: { studentId: string; name: string; percentage: number; grade: string | null } | null;
+    subjectAverages: { subjectId: string; subjectName: string; averageObtained: number; maxMarks: number }[];
+    gradeDistribution: Record<string, number>;
+  }[];
 }
 
 // ---------- Platform admin ----------
@@ -553,6 +827,20 @@ export interface LeaveApplicationResponse {
   createdAt: string;
 }
 
+export interface LeaveBalanceResponse {
+  id: string;
+  staffId: string;
+  leaveType: LeaveType;
+  year: number;
+  entitledDays: number;
+  consumedDays: number;
+  remainingDays: number;
+}
+
+export interface UpdateLeaveBalanceRequest {
+  entitledDays: number;
+}
+
 export interface PayslipResponse {
   id: string;
   staffId: string;
@@ -567,4 +855,53 @@ export interface PayslipResponse {
   breakdown: Record<string, unknown>;
   pdfUrl: string | null;
   generatedAt: string;
+}
+
+// ---------- Substitutes ----------
+export interface SubstituteResponse {
+  id: string;
+  absentTeacherId: string;
+  substituteId: string;
+  sectionId: string;
+  assignedDate: string;
+  note: string | null;
+  createdById: string;
+  createdAt: string;
+}
+
+export interface CreateSubstituteRequest {
+  absentTeacherId: string;
+  substituteId: string;
+  sectionId: string;
+  assignedDate: string;
+  note?: string;
+}
+
+// ---------- Admit Cards (Hall Tickets) ----------
+export type AdmitCardStatus = 'BLOCKED' | 'PENDING' | 'GENERATED' | 'DOWNLOADED';
+
+export interface AdmitCardResponse {
+  id: string;
+  examId: string;
+  studentId: string;
+  studentName: string;
+  admissionNumber: string | null;
+  className: string | null;
+  sectionName: string | null;
+  rollNumber: number | null;
+  admitCardNo: string | null;
+  seatNumber: string | null;
+  status: AdmitCardStatus;
+  feeCleared: boolean;
+  outstandingPaiseSnapshot: number;
+  pdfUrl: string | null;
+  generatedAt: string | null;
+}
+
+export interface AdmitCardDashboardResponse {
+  total: number;
+  generated: number;
+  downloaded: number;
+  blocked: number;
+  pending: number;
 }

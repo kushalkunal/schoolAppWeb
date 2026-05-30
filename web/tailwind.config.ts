@@ -65,6 +65,21 @@ const config: Config = {
           '100%': { backgroundPosition: '1000px 0' },
         },
       },
+      // Safe-area-inset utilities — critical for iPhone notch / home bar
+      spacing: {
+        'safe-top':    'env(safe-area-inset-top)',
+        'safe-bottom': 'env(safe-area-inset-bottom)',
+        'safe-left':   'env(safe-area-inset-left)',
+        'safe-right':  'env(safe-area-inset-right)',
+      },
+      height: {
+        // dvh = dynamic viewport height — fixes 100vh jump on iOS when address bar shows/hides
+        dvh: '100dvh',
+        'screen-dvh': '100dvh',
+      },
+      minHeight: {
+        dvh: '100dvh',
+      },
       backgroundImage: {
         'brand-gradient':
           'linear-gradient(135deg, var(--brand-primary), color-mix(in srgb, var(--brand-primary) 60%, var(--brand-accent)))',

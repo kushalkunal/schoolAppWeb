@@ -15,7 +15,15 @@ import org.springframework.validation.annotation.Validated;
 @ConfigurationProperties(prefix = "app.email")
 public record EmailProperties(
     @NotNull Provider provider,
-    @NotBlank String from
+    @NotBlank String from,
+    /** When non-blank, ALL outbound emails are redirected to this address (dev/test only). */
+    String devRecipientOverride
 ) {
     public enum Provider { LOGGING, SMTP }
+
+    /** Returns the effective recipient — override wins when set. */
+    public String effectiveRecipient(String actual) {
+        return (devRecipientOverride != null && !devRecipientOverride.isBlank())
+            ? devRecipientOverride : actual;
+    }
 }

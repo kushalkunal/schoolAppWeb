@@ -68,7 +68,8 @@ public class EmailConfigResolver {
                             from instanceof String f ? f : (globalProps.from() == null ? u : globalProps.from()),
                             envAuth,
                             envStartTls,
-                            perTenant.get().id()
+                            perTenant.get().id(),
+                            globalProps.devRecipientOverride()
                         ));
                     }
                     log.warn("Tenant {} has SMTP config row but host/username missing", schoolId);
@@ -81,7 +82,8 @@ public class EmailConfigResolver {
             return Optional.of(new SmtpCreds(
                 envHost, envPort, envUsername, envPassword,
                 globalProps.from() == null ? envUsername : globalProps.from(),
-                envAuth, envStartTls, null
+                envAuth, envStartTls, null,
+                globalProps.devRecipientOverride()
             ));
         }
         return Optional.empty();
@@ -90,9 +92,10 @@ public class EmailConfigResolver {
     /**
      * Resolved SMTP config. {@code configId} is the {@code tenant_provider_configs} row id
      * when creds came from the DB; null when JVM env was used.
+     * {@code devRecipientOverride} — when non-blank all emails are redirected to this address.
      */
     public record SmtpCreds(
         String host, int port, String username, String password, String from,
-        boolean auth, boolean startTls, UUID configId
+        boolean auth, boolean startTls, UUID configId, String devRecipientOverride
     ) {}
 }

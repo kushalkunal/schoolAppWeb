@@ -17,10 +17,7 @@ hs_err_pid*.log
 **/.turbo/
 **/*.tsbuildinfo
 
-# --- Playwright ---
-**/test-results/
-**/playwright-report/
-**/playwright/.cache/
+ 
 
 # --- Env / secrets ---
 .env

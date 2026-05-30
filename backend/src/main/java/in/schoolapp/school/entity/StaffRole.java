@@ -13,5 +13,6 @@ public enum StaffRole {
     CLASS_TEACHER,      // own section: all; other sections: read-only
     SUBJECT_TEACHER,    // marks entry for assigned subject/section only
     ACCOUNTANT,         // fee module only
+    LIBRARIAN,          // library module: issue/return books, manage catalogue
     VIEWER              // read-only, no PII phone numbers
 }

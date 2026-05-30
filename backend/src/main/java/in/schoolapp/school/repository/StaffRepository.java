@@ -25,4 +25,6 @@ public interface StaffRepository extends JpaRepository<Staff, UUID> {
     boolean existsByEmail(String email);
 
     List<Staff> findBySchoolIdAndActiveTrueOrderByFirstName(UUID schoolId);
+
+    Optional<Staff> findByIdAndSchoolId(UUID id, UUID schoolId);
 }

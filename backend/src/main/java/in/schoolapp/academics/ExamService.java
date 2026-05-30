@@ -37,6 +37,8 @@ public class ExamService {
         exam.setExamType(req.examType());
         exam.setStartDate(req.startDate());
         exam.setEndDate(req.endDate());
+        exam.setClassId(req.classId());
+        exam.setSectionId(req.sectionId());
         exam = examRepository.save(exam);
         log.info("Created exam id={} tenantId={} name={}", exam.getId(), tenantId, exam.getName());
         return ExamResponse.from(exam);

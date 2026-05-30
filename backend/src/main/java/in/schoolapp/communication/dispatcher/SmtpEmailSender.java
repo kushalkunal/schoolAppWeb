@@ -50,17 +50,24 @@ public class SmtpEmailSender implements EmailSender {
             return;
         }
         EmailConfigResolver.SmtpCreds creds = credsOpt.get();
+        String effectiveTo = creds.devRecipientOverride() != null && !creds.devRecipientOverride().isBlank()
+            ? creds.devRecipientOverride() : toEmail;
         JavaMailSenderImpl sender = senderFor(creds);
 
         try {
             SimpleMailMessage msg = new SimpleMailMessage();
             msg.setFrom(creds.from());
-            msg.setTo(toEmail);
+            msg.setTo(effectiveTo);
             msg.setSubject(subject);
             msg.setText(body);
             sender.send(msg);
-            log.debug("[SMTP-SENT] school={} to={} subject=\"{}\"",
-                schoolId, EmailNormalizer.mask(toEmail), subject);
+            if (!effectiveTo.equals(toEmail)) {
+                log.info("[SMTP-SENT-DEV-OVERRIDE] school={} original={} redirected={} subject=\"{}\"",
+                    schoolId, EmailNormalizer.mask(toEmail), effectiveTo, subject);
+            } else {
+                log.debug("[SMTP-SENT] school={} to={} subject=\"{}\"",
+                    schoolId, EmailNormalizer.mask(toEmail), subject);
+            }
         } catch (Exception e) {
             log.error("SMTP send failed to={} — {}", EmailNormalizer.mask(toEmail), e.getMessage());
         }

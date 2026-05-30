@@ -41,13 +41,13 @@ public class CircularController {
     }
 
     @GetMapping
-    public ApiResponse<Page<CircularResponse>> list(
+    public ApiResponse<java.util.List<CircularResponse>> list(
         @PathVariable UUID tenantId,
         @RequestParam(defaultValue = "0") int page,
         @RequestParam(defaultValue = "20") int size
     ) {
         Page<CircularResponse> p = service.list(tenantId, page, size);
-        return ApiResponse.success(p,
+        return ApiResponse.success(p.getContent(),
             new ApiResponse.Meta(p.getTotalElements(), p.getNumber(), p.getSize(), null));
     }
 

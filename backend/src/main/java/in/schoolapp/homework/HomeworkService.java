@@ -1,7 +1,9 @@
 package in.schoolapp.homework;
 
+import in.schoolapp.academics.repository.TeacherSubjectAssignmentRepository;
 import in.schoolapp.common.AppException;
 import in.schoolapp.common.ErrorCode;
+import in.schoolapp.common.TenantContext;
 import in.schoolapp.communication.dispatcher.WhatsAppMessage.MessageType;
 import in.schoolapp.communication.parent.ParentNotificationService;
 import in.schoolapp.feature.FeatureKey;
@@ -11,6 +13,7 @@ import in.schoolapp.homework.entity.HomeworkAssignment;
 import in.schoolapp.homework.entity.HomeworkSubmission;
 import in.schoolapp.homework.repository.HomeworkAssignmentRepository;
 import in.schoolapp.homework.repository.HomeworkSubmissionRepository;
+import in.schoolapp.school.ClassSectionService;
 import in.schoolapp.student.entity.EnrollmentStatus;
 import in.schoolapp.student.entity.StudentEnrollment;
 import in.schoolapp.student.repository.StudentEnrollmentRepository;
@@ -33,11 +36,30 @@ public class HomeworkService {
     private final HomeworkSubmissionRepository submissionRepo;
     private final StudentEnrollmentRepository enrollmentRepo;
     private final ParentNotificationService parentNotificationService;
+    private final ClassSectionService classSectionService;
+    private final TeacherSubjectAssignmentRepository teacherAssignmentRepository;
 
     // ---------- Assignments ----------
 
     @Transactional
     public AssignmentDto createAssignment(UUID tenantId, AssignmentDto req) {
+        // RBAC: a SUBJECT_TEACHER may only assign homework for sections+subjects they teach.
+        // CLASS_TEACHER, PRINCIPAL, ADMIN, SCHOOL_OWNER are unrestricted.
+        String role = TenantContext.getRole();
+        if ("SUBJECT_TEACHER".equals(role)) {
+            var section = classSectionService.getSectionOrThrow(tenantId, req.sectionId());
+            boolean isAssigned = teacherAssignmentRepository
+                .existsByStaffIdAndSubjectIdAndSectionIdAndAcademicYearId(
+                    TenantContext.getStaffId(),
+                    req.subjectId(),
+                    req.sectionId(),
+                    section.getAcademicYearId());
+            if (!isAssigned) {
+                throw new AppException(ErrorCode.FORBIDDEN,
+                    "You can only assign homework for subjects you are assigned to teach in this section.");
+            }
+        }
+
         HomeworkAssignment a = new HomeworkAssignment();
         a.setSchoolId(tenantId);
         a.setSectionId(req.sectionId());

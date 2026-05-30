@@ -15,14 +15,12 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
   const pathname = usePathname();
   const tenantId = typeof params.tenantId === 'string' ? params.tenantId : '';
 
-  // Each tab can optionally name a global feature-flag that gates it. Schools deploying a
-  // slimmer build set NEXT_PUBLIC_FEATURE_X=false to hide the corresponding tab + page.
   const tabs: { label: string; href: string; flag?: FeatureKey }[] = [
-    { label: 'School',   href: `/tenants/${tenantId}/settings/school` },
-    { label: 'Branding', href: `/tenants/${tenantId}/settings/branding` },
-    { label: 'Classes',  href: `/tenants/${tenantId}/settings/classes` },
-    { label: 'Subjects', href: `/tenants/${tenantId}/settings/subjects` },
-    { label: 'Staff',    href: `/tenants/${tenantId}/settings/staff` },
+    { label: 'School',     href: `/tenants/${tenantId}/settings/school` },
+    { label: 'Branding',   href: `/tenants/${tenantId}/settings/branding` },
+    { label: 'Classes',    href: `/tenants/${tenantId}/settings/classes` },
+    { label: 'Subjects',   href: `/tenants/${tenantId}/settings/subjects` },
+    { label: 'Templates',  href: `/tenants/${tenantId}/settings/templates` },
   ];
   const visibleTabs = tabs.filter((t) => !t.flag || isFeatureEnabled(t.flag));
 

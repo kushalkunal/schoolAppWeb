@@ -5,6 +5,7 @@ import in.schoolapp.common.ApiResponse;
 import in.schoolapp.feature.FeatureKey;
 import in.schoolapp.feature.RequiresFeature;
 import in.schoolapp.fee.dto.BulkReminderRequest;
+import in.schoolapp.fee.dto.ClassCollectionRow;
 import in.schoolapp.fee.dto.CreateInvoiceRequest;
 import in.schoolapp.fee.dto.DefaulterResponse;
 import in.schoolapp.fee.dto.FeeDashboardResponse;
@@ -12,9 +13,11 @@ import in.schoolapp.fee.dto.InvoiceResponse;
 import in.schoolapp.fee.dto.OpeningBalanceRequest;
 import in.schoolapp.fee.dto.PaymentResponse;
 import in.schoolapp.fee.dto.QuickCollectRequest;
+import in.schoolapp.fee.dto.RecentPaymentRow;
 import in.schoolapp.fee.dto.StudentFeeSummaryResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -26,6 +29,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -107,6 +111,28 @@ public class FeeController {
         @RequestParam(defaultValue = "50") int size
     ) {
         return ApiResponse.success(feeDashboardService.listDefaulters(tenantId, page, size));
+    }
+
+    // ----- Reports -----
+
+    @GetMapping("/fees/payments/recent")
+    public ApiResponse<List<RecentPaymentRow>> recentPayments(
+        @PathVariable UUID tenantId,
+        @RequestParam(defaultValue = "20") int size
+    ) {
+        return ApiResponse.success(feeDashboardService.listRecentPayments(tenantId, Math.min(size, 100)));
+    }
+
+    @GetMapping("/fees/reports/class-wise")
+    public ApiResponse<List<ClassCollectionRow>> classWiseReport(
+        @PathVariable UUID tenantId,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        LocalDate today = LocalDate.now();
+        LocalDate start = from != null ? from : today.withDayOfMonth(1);
+        LocalDate end   = to   != null ? to   : today;
+        return ApiResponse.success(feeDashboardService.classWiseReport(tenantId, start, end));
     }
 
     // ----- Manual reminders -----

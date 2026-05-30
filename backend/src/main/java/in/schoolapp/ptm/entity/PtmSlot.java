@@ -24,5 +24,7 @@ public class PtmSlot {
     @Column(name = "end_time", nullable = false) private LocalTime endTime;
     @Column(nullable = false) private int capacity = 1;
     @Column(name = "booked_count", nullable = false) private int bookedCount;
+    /** Optional: the class/section this PTM slot is for. When set, all parents in that section receive an announcement. */
+    @Column(name = "section_id") private UUID sectionId;
     @Column(name = "created_at", nullable = false) private OffsetDateTime createdAt = OffsetDateTime.now();
 }

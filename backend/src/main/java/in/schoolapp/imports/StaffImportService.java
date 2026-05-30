@@ -57,7 +57,7 @@ public class StaffImportService {
                     result.recordAccepted(new StaffResponse(
                         null, tenantId, firstName, lastName,
                         displayName(firstName, lastName),
-                        phone, email, role, true));
+                        phone, email, null, null, role, true, false));
                 } else {
                     result.recordAccepted(staffService.createStaff(tenantId, req));
                 }

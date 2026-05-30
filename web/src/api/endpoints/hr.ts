@@ -1,6 +1,7 @@
-import { apiGet, apiPost } from '@/api/client';
+import { apiGet, apiPost, apiPut } from '@/api/client';
 import type {
-  LeaveApplicationRequest, LeaveApplicationResponse, LeaveDecisionRequest,
+  LeaveApplicationRequest, LeaveApplicationResponse, LeaveBalanceResponse,
+  LeaveDecisionRequest, LeaveType, UpdateLeaveBalanceRequest,
   PayslipResponse,
   StaffAttendanceRequest, StaffAttendanceResponse, StaffMonthlySummaryResponse,
 } from '@/types/domain';
@@ -42,6 +43,20 @@ export const hrApi = {
   },
   pendingLeaves(tenantId: string): Promise<LeaveApplicationResponse[]> {
     return apiGet(`/api/v1/tenants/${tenantId}/hr/leave/pending`);
+  },
+
+  // ---------- Leave Balances ----------
+  listLeaveBalances(tenantId: string, staffId: string, year?: number)
+  : Promise<LeaveBalanceResponse[]> {
+    const qs = year ? `?year=${year}` : '';
+    return apiGet(`/api/v1/tenants/${tenantId}/hr/leave-balances/staff/${staffId}${qs}`);
+  },
+  updateLeaveBalance(tenantId: string, staffId: string, leaveType: LeaveType,
+                     req: UpdateLeaveBalanceRequest, year?: number)
+  : Promise<LeaveBalanceResponse> {
+    const qs = year ? `?year=${year}` : '';
+    return apiPut(
+      `/api/v1/tenants/${tenantId}/hr/leave-balances/staff/${staffId}/${leaveType}${qs}`, req);
   },
 
   // ---------- Payroll ----------

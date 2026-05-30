@@ -1,10 +1,15 @@
 package in.schoolapp.fee;
 
+import in.schoolapp.fee.dto.ClassCollectionRow;
 import in.schoolapp.fee.dto.DefaulterResponse;
 import in.schoolapp.fee.dto.FeeDashboardResponse;
+import in.schoolapp.fee.dto.RecentPaymentRow;
+import in.schoolapp.fee.entity.PaymentMode;
 import in.schoolapp.fee.repository.FeeInvoiceRepository;
 import in.schoolapp.fee.repository.FeeInvoiceRepository.DefaulterRow;
 import in.schoolapp.fee.repository.FeePaymentRepository;
+import in.schoolapp.fee.repository.FeePaymentRepository.ClassCollectionProjection;
+import in.schoolapp.fee.repository.FeePaymentRepository.RecentPaymentProjection;
 import in.schoolapp.school.repository.SchoolClassRepository;
 import in.schoolapp.school.repository.SectionRepository;
 import in.schoolapp.student.entity.StudentEnrollment;
@@ -103,5 +108,37 @@ public class FeeDashboardService {
                 daysOverdue
             );
         }).toList();
+    }
+
+    /** Recent payments for the cashier dashboard (last {@code size} payments, newest first). */
+    @Transactional(readOnly = true)
+    public List<RecentPaymentRow> listRecentPayments(UUID tenantId, int size) {
+        return paymentRepository.findRecentBySchool(tenantId, size).stream()
+            .map(p -> new RecentPaymentRow(
+                p.getPaymentId(),
+                p.getStudentId(),
+                p.getStudentName(),
+                p.getAmountPaise(),
+                PaymentMode.valueOf(p.getPaymentMode()),
+                p.getReceiptNumber(),
+                p.getReceiptPdfUrl(),
+                p.getPaymentDate()
+            ))
+            .toList();
+    }
+
+    /** Class-wise collection report for a date range. */
+    @Transactional(readOnly = true)
+    public List<ClassCollectionRow> classWiseReport(UUID tenantId, LocalDate from, LocalDate to) {
+        return paymentRepository.classWiseReport(tenantId, from, to).stream()
+            .map(r -> new ClassCollectionRow(
+                r.getClassId(),
+                r.getClassName(),
+                r.getCollectedPaise(),
+                r.getPaymentCount(),
+                r.getOutstandingPaise(),
+                r.getStudentCount()
+            ))
+            .toList();
     }
 }

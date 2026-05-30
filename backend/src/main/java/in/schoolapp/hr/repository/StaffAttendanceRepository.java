@@ -28,4 +28,8 @@ public interface StaffAttendanceRepository extends JpaRepository<StaffAttendance
                                          @Param("staffId") UUID staffId,
                                          @Param("from") LocalDate from,
                                          @Param("to") LocalDate to);
+
+    /** All pending-approval rows for a school on a given date. */
+    List<StaffAttendance> findBySchoolIdAndAttendanceDateAndApproved(
+        UUID schoolId, LocalDate date, boolean approved);
 }

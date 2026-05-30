@@ -1,48 +1,46 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, Save, CheckCircle2 } from 'lucide-react';
+import { ChevronLeft, Save, CheckCircle2, AlertCircle, BookOpen, ClipboardList, Lock, ShieldAlert } from 'lucide-react';
 import { academicsApi } from '@/api/endpoints/academics';
 import { schoolApi } from '@/api/endpoints/school';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { ErrorBanner } from '@/components/ui/ErrorBanner';
 import { Spinner } from '@/components/ui/Spinner';
-import { MARKS_WRITER, RequireRole, useHasRole } from '@/auth/RequireRole';
-import type { MarkEntryDto, SubjectResponse } from '@/types/domain';
+import { useHasRole } from '@/auth/RequireRole';
+import type { BulkComponentMarksRequest, ComponentMarkEntryDto } from '@/types/domain';
 
 /**
- * Marks-entry grid. Students on rows × subjects on columns. The teacher picks a section,
- * fills cells (or marks absent), then clicks Save Draft or Submit Final.
- *
- * Backend always upserts on (examId, studentId, subjectId), so re-saves are idempotent and
- * mid-grid refreshes won't lose work.
+ * Component-aware marks entry grid.
+ * Rows = students, columns = subject × component (Theory/70, Practical/30 …).
+ * Auto-saves draft on blur; Submit Final triggers result computation.
  */
 export default function MarksEntryPage() {
   const params = useParams();
   const tenantId = typeof params.tenantId === 'string' ? params.tenantId : '';
   const examId = typeof params.examId === 'string' ? params.examId : '';
-
   const canWrite = useHasRole('SCHOOL_OWNER', 'PRINCIPAL', 'ADMIN', 'CLASS_TEACHER', 'SUBJECT_TEACHER');
+  const isClassTeacher = useHasRole('CLASS_TEACHER');
+  const isSubjectTeacher = useHasRole('SUBJECT_TEACHER');
+  const isPrincipal = useHasRole('SCHOOL_OWNER', 'PRINCIPAL', 'ADMIN');
 
-  // Section selector (default = first section the teacher can see)
-  const [sectionId, setSectionId] = useState<string>('');
-  const classes = useQuery({
+  const [sectionId, setSectionId] = useState('');
+  const classesQ = useQuery({
     queryKey: ['classes', tenantId],
     queryFn: () => schoolApi.listClasses(tenantId),
     enabled: !!tenantId,
   });
 
-  // Default section once classes load
   useEffect(() => {
-    if (!sectionId && classes.data && classes.data.length > 0) {
-      const firstSection = classes.data.flatMap((c) => c.sections)[0];
-      if (firstSection) setSectionId(firstSection.id);
+    if (!sectionId && classesQ.data?.length) {
+      const first = classesQ.data.flatMap(c => c.sections)[0];
+      if (first) setSectionId(first.id);
     }
-  }, [classes.data, sectionId]);
+  }, [classesQ.data, sectionId]);
 
   return (
     <div className="space-y-4">
@@ -50,26 +48,29 @@ export default function MarksEntryPage() {
         <Link href={`/tenants/${tenantId}/academics/exams`} className="text-slate-500 hover:text-slate-700">
           <ChevronLeft size={18} />
         </Link>
-        <h1 className="text-2xl font-semibold">Marks entry</h1>
+        <div>
+          <h1 className="text-2xl font-semibold">Marks Entry</h1>
+          <p className="text-sm text-slate-500">Enter component-wise marks. Submit Final locks marks and computes results.</p>
+        </div>
       </div>
 
-      {classes.isLoading && <Spinner />}
-      {classes.isError && <ErrorBanner error={classes.error} onRetry={() => classes.refetch()} />}
+      {classesQ.isLoading && <Spinner />}
+      {classesQ.isError && <ErrorBanner error={classesQ.error} />}
 
-      {classes.data && (
+      {classesQ.data && (
         <Card>
           <label className="block">
-            <span className="text-sm text-slate-700 mb-1 inline-block">Section</span>
+            <span className="text-sm text-slate-700 mb-1 inline-block font-medium">Section</span>
             <select
               value={sectionId}
-              onChange={(e) => setSectionId(e.target.value)}
+              onChange={e => setSectionId(e.target.value)}
               className="block w-full rounded border border-slate-300 px-3 py-2 text-sm max-w-sm"
             >
               <option value="">Select a section</option>
-              {classes.data.map((c) => (
+              {classesQ.data.map(c => (
                 <optgroup key={c.id} label={c.name}>
-                  {c.sections.map((s) => (
-                    <option key={s.id} value={s.id}>{c.name} - {s.name}</option>
+                  {c.sections.map(s => (
+                    <option key={s.id} value={s.id}>{c.name} — {s.name}</option>
                   ))}
                 </optgroup>
               ))}
@@ -79,242 +80,327 @@ export default function MarksEntryPage() {
       )}
 
       {sectionId && tenantId && examId && (
-        <MarksGrid tenantId={tenantId} examId={examId} sectionId={sectionId} canWrite={canWrite} />
+        <ComponentGrid
+          tenantId={tenantId} examId={examId} sectionId={sectionId}
+          canWrite={canWrite} isClassTeacher={isClassTeacher} isSubjectTeacher={isSubjectTeacher}
+          isPrincipal={isPrincipal}
+        />
       )}
     </div>
   );
 }
 
-function MarksGrid({ tenantId, examId, sectionId, canWrite }: {
+type CellKey = string; // `${studentId}|${configId}`
+type CellState = { obtained: string; absent: boolean };
+
+function ComponentGrid({
+  tenantId, examId, sectionId, canWrite, isClassTeacher, isSubjectTeacher, isPrincipal,
+}: {
   tenantId: string; examId: string; sectionId: string; canWrite: boolean;
+  isClassTeacher: boolean; isSubjectTeacher: boolean; isPrincipal: boolean;
 }) {
   const qc = useQueryClient();
+  const [cells, setCells] = useState<Record<CellKey, CellState>>({});
+  const [dirty, setDirty] = useState(false);
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const sheet = useQuery({
-    queryKey: ['marks-sheet', tenantId, examId, sectionId],
-    queryFn: () => academicsApi.getMarksSheet(tenantId, examId, sectionId),
-  });
-  const subjectsQ = useQuery({
-    queryKey: ['subjects', tenantId],
-    queryFn: () => academicsApi.listSubjects(tenantId),
-    enabled: !!tenantId,
-  });
-  const completion = useQuery({
-    queryKey: ['marks-completion', tenantId, examId, sectionId],
-    queryFn: () => academicsApi.getCompletionStatus(tenantId, examId, sectionId),
+  const sheetQ = useQuery({
+    queryKey: ['component-marks-sheet', tenantId, examId, sectionId],
+    queryFn: () => academicsApi.getComponentMarksSheet(tenantId, examId, sectionId),
+    staleTime: 0,
   });
 
-  // Local draft state — keyed `${studentId}|${subjectId}` → { obtained, absent, max }
-  const [draft, setDraft] = useState<Record<string, { obtained: string; absent: boolean; max: string }>>({});
-  const [defaultMax, setDefaultMax] = useState<string>('100');
-
-  // Seed from existing marks once they arrive
+  // Seed from server
   useEffect(() => {
-    if (!sheet.data) return;
-    const seeded: typeof draft = {};
-    for (const m of sheet.data.existingMarks) {
-      seeded[`${m.studentId}|${m.subjectId}`] = {
-        obtained: m.obtainedMarks != null ? String(m.obtainedMarks) : '',
-        absent: m.absent,
-        max: String(m.maxMarks),
-      };
-    }
-    setDraft(seeded);
-  }, [sheet.data]);
-
-  const subjects = subjectsQ.data ?? [];
-
-  const setCell = (studentId: string, subjectId: string, patch: Partial<{ obtained: string; absent: boolean; max: string }>) => {
-    setDraft((d) => {
-      const key = `${studentId}|${subjectId}`;
-      const existing = d[key] ?? { obtained: '', absent: false, max: defaultMax };
-      return { ...d, [key]: { ...existing, ...patch } };
-    });
-  };
-
-  const buildEntries = (): MarkEntryDto[] => {
-    const out: MarkEntryDto[] = [];
-    if (!sheet.data) return out;
-    for (const student of sheet.data.students) {
-      for (const subj of subjects) {
-        const key = `${student.studentId}|${subj.id}`;
-        const cell = draft[key];
-        if (!cell) continue;
-        // Skip empty cells unless marked absent
-        if (!cell.absent && cell.obtained === '') continue;
-        const max = Number(cell.max || defaultMax);
-        if (!Number.isFinite(max) || max <= 0) continue;
-        out.push({
-          studentId: student.studentId,
-          subjectId: subj.id,
-          maxMarks: max,
-          obtainedMarks: cell.absent ? null : (cell.obtained === '' ? null : Number(cell.obtained)),
-          absent: cell.absent,
-        });
+    if (!sheetQ.data) return;
+    const init: Record<CellKey, CellState> = {};
+    for (const student of sheetQ.data.students) {
+      for (const subject of student.subjects) {
+        for (const comp of subject.components) {
+          init[`${student.studentId}|${comp.configId}`] = {
+            obtained: comp.obtained != null ? String(comp.obtained) : '',
+            absent: comp.absent,
+          };
+        }
       }
     }
-    return out;
-  };
+    setCells(init);
+    setDirty(false);
+  }, [sheetQ.data]);
 
-  const save = useMutation({
-    mutationFn: (submitFinal: boolean) => academicsApi.submitMarks(tenantId, examId, {
-      sectionId,
-      entries: buildEntries(),
-      submitFinal,
-    }),
+  const saveMutation = useMutation({
+    mutationFn: (req: BulkComponentMarksRequest) =>
+      academicsApi.submitComponentMarks(tenantId, examId, req),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['marks-sheet', tenantId, examId, sectionId] });
-      qc.invalidateQueries({ queryKey: ['marks-completion', tenantId, examId, sectionId] });
+      qc.invalidateQueries({ queryKey: ['component-marks-sheet', tenantId, examId, sectionId] });
+      setDirty(false);
+      setSavedAt(new Date());
     },
   });
 
-  const filledCount = useMemo(() => Object.values(draft).filter((c) => c.absent || c.obtained !== '').length, [draft]);
+  function buildEntries(): ComponentMarkEntryDto[] {
+    if (!sheetQ.data) return [];
+    return sheetQ.data.students.flatMap(student =>
+      student.subjects.flatMap(subj =>
+        subj.components.map(comp => {
+          const cell = cells[`${student.studentId}|${comp.configId}`];
+          return {
+            studentId: student.studentId,
+            configId: comp.configId,
+            obtained: cell?.absent ? 0 : (cell?.obtained ? parseFloat(cell.obtained) : undefined),
+            absent: cell?.absent ?? false,
+          };
+        })
+      )
+    );
+  }
 
-  if (sheet.isLoading || subjectsQ.isLoading) return <Spinner />;
-  if (sheet.isError) return <ErrorBanner error={sheet.error} onRetry={() => sheet.refetch()} />;
-  if (!sheet.data) return null;
+  function save(submitFinal: boolean) {
+    // Cancel any pending auto-save to prevent draft overwriting a final submit
+    if (autoSaveTimer.current) {
+      clearTimeout(autoSaveTimer.current);
+      autoSaveTimer.current = null;
+    }
+    saveMutation.mutate({ sectionId, entries: buildEntries(), submitFinal });
+  }
 
-  const students = sheet.data.students;
-  if (subjects.length === 0) {
+  function updateCell(key: CellKey, patch: Partial<CellState>) {
+    setCells(prev => ({ ...prev, [key]: { ...prev[key], ...patch } }));
+    setDirty(true);
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => { if (canWrite) save(false); }, 800);
+  }
+
+  if (sheetQ.isLoading) return <Spinner />;
+  if (sheetQ.isError) return <ErrorBanner error={sheetQ.error} onRetry={() => sheetQ.refetch()} />;
+  if (!sheetQ.data || !sheetQ.data.students.length)
+    return <Card><p className="text-center text-slate-500 py-8">No students in this section.</p></Card>;
+
+  // Section lock state
+  const isLocked = sheetQ.data.locked;
+  // true only if the logged-in CLASS_TEACHER is the class teacher of THIS specific section
+  const effectiveIsClassTeacher = sheetQ.data.isOwnClassTeacher;
+  // Principal/Admin can always edit even when locked; teachers cannot
+  const effectiveCanWrite = canWrite && (!isLocked || isPrincipal);
+
+  const firstStudent = sheetQ.data.students[0];
+  if (!firstStudent.subjects.length) {
     return (
       <Card>
-        <div className="text-center py-6 text-slate-600">
-          <p className="font-medium mb-1">No subjects defined</p>
-          <p className="text-sm text-slate-500">Add subjects via Settings → Academics before entering marks.</p>
-        </div>
+        <p className="text-center text-slate-500 py-8">
+          No exam structure configured.{' '}
+          <Link href={`/tenants/${tenantId}/academics/exams/${examId}/structure`} className="text-indigo-600 underline">
+            Configure the marking scheme first.
+          </Link>
+        </p>
       </Card>
     );
   }
-  if (students.length === 0) {
-    return (
-      <Card>
-        <div className="text-center py-6 text-slate-500">No students enrolled in this section.</div>
-      </Card>
-    );
-  }
+
+  // Per-subject completion: a subject is "submitted" when ALL students' ALL components are not draft
+  const subjectCompletion = firstStudent.subjects.map(subj => {
+    const allFinal = sheetQ.data!.students.every(stu => {
+      const s = stu.subjects.find(s => s.subjectId === subj.subjectId);
+      return s?.components.every(c => !c.draft) ?? false;
+    });
+    const enteredCount = sheetQ.data!.students.filter(stu => {
+      const s = stu.subjects.find(s => s.subjectId === subj.subjectId);
+      return s?.components.some(c => c.obtained != null || c.absent) ?? false;
+    }).length;
+    return { subjectId: subj.subjectId, subjectName: subj.subjectName, allFinal, enteredCount };
+  });
+  const totalSubjects = subjectCompletion.length;
+  const submittedSubjects = subjectCompletion.filter(s => s.allFinal).length;
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between text-sm">
-        <div className="flex items-center gap-4 text-slate-600">
-          <span>{students.length} students × {subjects.length} subjects</span>
-          <span>{filledCount} cells filled</span>
-          {completion.data && (
-            <span>
-              Section completion: <span className="font-medium text-slate-800">{completion.data.percentComplete}%</span>
-              <span className="text-slate-500"> ({completion.data.studentsWithAllMarks}/{completion.data.totalStudents})</span>
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-slate-600 flex items-center gap-1">
-            Max marks
-            <input
-              type="number"
-              value={defaultMax}
-              min={1}
-              onChange={(e) => setDefaultMax(e.target.value)}
-              className="w-16 rounded border border-slate-300 px-2 py-1 text-xs"
-            />
-          </label>
-          <RequireRole roles={MARKS_WRITER}>
-            <Button variant="secondary" size="sm" onClick={() => save.mutate(false)} disabled={save.isPending || !canWrite}>
-              <Save size={14} className="mr-1" /> Save draft
-            </Button>
-            <Button size="sm" onClick={() => {
-              if (confirm('Submit final marks for this section? Cells become read-only.')) save.mutate(true);
-            }} disabled={save.isPending || !canWrite}>
-              <CheckCircle2 size={14} className="mr-1" /> Submit final
-            </Button>
-          </RequireRole>
-        </div>
-      </div>
-
-      {save.isError && <ErrorBanner error={save.error} />}
-      {save.isSuccess && !save.isPending && (
-        <div className="bg-green-50 border border-green-200 text-green-800 text-sm rounded px-3 py-2">
-          Saved {save.data?.length ?? 0} marks.
+    <div className="space-y-3">
+      {/* LOCKED: shown to teachers when class teacher has submitted final */}
+      {isLocked && !isPrincipal && (
+        <div className="flex items-start gap-3 bg-slate-100 border border-slate-300 rounded-lg px-4 py-3">
+          <Lock size={18} className="text-slate-500 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-slate-700">
+              Marks locked — submitted by {sheetQ.data.lockedByName ?? 'Class Teacher'}
+            </p>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {sheetQ.data.lockedAt
+                ? `Locked on ${new Date(sheetQ.data.lockedAt).toLocaleString()}.`
+                : ''}{' '}
+              Contact the Principal if a correction is needed.
+            </p>
+          </div>
         </div>
       )}
 
-      <div className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-slate-600 text-xs uppercase sticky top-0">
-            <tr>
-              <th className="text-left px-3 py-2 font-medium w-12">Roll</th>
-              <th className="text-left px-3 py-2 font-medium min-w-[180px]">Student</th>
-              {subjects.map((s) => (
-                <th key={s.id} className="text-center px-2 py-2 font-medium min-w-[90px]">
-                  {s.name}{s.code && <div className="text-[10px] font-normal text-slate-400">{s.code}</div>}
+      {/* LOCKED: override notice for Principal */}
+      {isLocked && isPrincipal && (
+        <div className="flex items-start gap-3 bg-amber-50 border border-amber-300 rounded-lg px-4 py-3">
+          <ShieldAlert size={18} className="text-amber-600 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-amber-800">
+              Override mode — locked by {sheetQ.data.lockedByName ?? 'Class Teacher'}
+            </p>
+            <p className="text-xs text-amber-600 mt-0.5">
+              As Principal, you can edit and re-submit. Results will be recomputed on save.
+            </p>
+          </div>
+        </div>
+      )}
+      {/* Subject teacher / non-own-class-teacher context banner */}
+      {!effectiveIsClassTeacher && !isPrincipal && firstStudent.subjects.length > 0 && (
+        <div className="flex items-start gap-3 bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-3">
+          <BookOpen size={18} className="text-indigo-600 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-indigo-800">
+              Entering marks for: {firstStudent.subjects.map(s => s.subjectName).join(', ')}
+            </p>
+            <p className="text-xs text-indigo-600 mt-0.5">
+              Only your assigned subject(s) are shown. Enter marks and click <strong>Submit Final</strong> when done.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Class teacher completion status panel — only shown to the actual class teacher of this section */}
+      {effectiveIsClassTeacher && totalSubjects > 0 && (
+        <Card>
+          <div className="flex items-center gap-2 mb-3">
+            <ClipboardList size={16} className="text-slate-600" />
+            <span className="font-semibold text-slate-800 text-sm">
+              Subject Completion Status — {submittedSubjects}/{totalSubjects} submitted
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+            {subjectCompletion.map(sc => (
+              <div key={sc.subjectId}
+                className={`rounded-lg border px-3 py-2 text-xs ${
+                  sc.allFinal
+                    ? 'border-green-200 bg-green-50'
+                    : sc.enteredCount > 0
+                      ? 'border-amber-200 bg-amber-50'
+                      : 'border-slate-200 bg-slate-50'
+                }`}>
+                <p className={`font-medium truncate ${sc.allFinal ? 'text-green-800' : 'text-slate-700'}`}>
+                  {sc.subjectName}
+                </p>
+                <p className={`mt-0.5 ${sc.allFinal ? 'text-green-600' : sc.enteredCount > 0 ? 'text-amber-600' : 'text-slate-400'}`}>
+                  {sc.allFinal
+                    ? '✓ Submitted'
+                    : sc.enteredCount > 0
+                      ? `${sc.enteredCount} entered (draft)`
+                      : 'Pending'}
+                </p>
+              </div>
+            ))}
+          </div>
+          {submittedSubjects < totalSubjects && (
+            <p className="text-xs text-amber-700 mt-3 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+              {totalSubjects - submittedSubjects} subject(s) still have draft or no marks.
+              Fill in any missing marks below, then click <strong>Submit All (Final)</strong> to lock and generate results.
+            </p>
+          )}
+          {submittedSubjects === totalSubjects && (
+            <p className="text-xs text-green-700 mt-3 bg-green-50 border border-green-200 rounded px-3 py-2">
+              All subjects have been submitted. Results have been computed for this section.
+            </p>
+          )}
+        </Card>
+      )}
+
+      {effectiveCanWrite && (
+        <div className="flex items-center justify-between bg-white border border-slate-200 rounded-lg px-4 py-3">
+          <div className="text-sm">
+            {dirty && <span className="flex items-center gap-1 text-amber-600"><AlertCircle size={14} />Unsaved changes</span>}
+            {savedAt && !dirty && <span className="flex items-center gap-1 text-green-600"><CheckCircle2 size={14} />Saved {savedAt.toLocaleTimeString()}</span>}
+            {saveMutation.isPending && <span className="text-slate-400">Saving…</span>}
+          </div>
+          <div className="flex gap-2">
+            <Button variant="secondary" size="sm" onClick={() => save(false)} disabled={saveMutation.isPending}>
+              <Save size={14} className="mr-1" />Save Draft
+            </Button>
+            <Button size="sm" onClick={() => save(true)} disabled={saveMutation.isPending}>
+              <CheckCircle2 size={14} className="mr-1" />
+              {effectiveIsClassTeacher ? 'Submit All (Final)' : isPrincipal && isLocked ? 'Save & Recompute' : 'Submit Final'}
+            </Button>
+          </div>
+        </div>
+      )}
+      {saveMutation.isError && <ErrorBanner error={saveMutation.error} />}
+
+      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="bg-slate-50">
+              <th className="sticky left-0 bg-slate-50 text-left px-4 py-2 font-medium text-slate-700 border-b border-slate-200 min-w-[160px]">Student</th>
+              {firstStudent.subjects.map(subj => (
+                <th key={subj.subjectId}
+                  colSpan={subj.components.length + 1}
+                  className="text-center px-2 py-2 font-semibold text-slate-700 border-b border-l border-slate-200 text-xs whitespace-nowrap">
+                  {subj.subjectName}
                 </th>
               ))}
             </tr>
+            <tr className="bg-slate-50 text-xs text-slate-500">
+              <th className="sticky left-0 bg-slate-50 border-b border-slate-200 px-4 py-1" />
+              {firstStudent.subjects.flatMap(subj => [
+                ...subj.components.map(comp => (
+                  <th key={comp.configId} className="text-center px-2 py-1 border-b border-l border-slate-200 whitespace-nowrap">
+                    {comp.componentName}<br /><span className="text-slate-400">/{comp.maxMarks}</span>
+                  </th>
+                )),
+                <th key={`${subj.subjectId}-ab`} className="text-center px-2 py-1 border-b border-l border-slate-200 text-red-400">Ab</th>,
+              ])}
+            </tr>
           </thead>
           <tbody>
-            {students.map((st) => (
-              <tr key={st.studentId} className="border-t border-slate-100 hover:bg-slate-50">
-                <td className="px-3 py-2 text-slate-500">{st.rollNumber ?? '—'}</td>
-                <td className="px-3 py-2">
-                  <div className="font-medium text-slate-800">{st.displayName}</div>
-                  <div className="text-xs text-slate-400">{st.admissionNumber}</div>
+            {sheetQ.data.students.map((student, ri) => (
+              <tr key={student.studentId} className={ri % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}>
+                <td className="sticky left-0 bg-inherit px-4 py-2 border-b border-slate-100">
+                  <p className="font-medium text-slate-800 text-xs leading-tight">{student.name}</p>
+                  {student.rollNumber != null && <p className="text-xs text-slate-400">Roll {student.rollNumber}</p>}
                 </td>
-                {subjects.map((subj) => (
-                  <MarkCell
-                    key={subj.id}
-                    cell={draft[`${st.studentId}|${subj.id}`] ?? { obtained: '', absent: false, max: defaultMax }}
-                    disabled={!canWrite}
-                    onChange={(patch) => setCell(st.studentId, subj.id, patch)}
-                  />
-                ))}
+                {student.subjects.flatMap(subj => [
+                  ...subj.components.map(comp => {
+                    const key = `${student.studentId}|${comp.configId}`;
+                    const cell = cells[key] ?? { obtained: '', absent: false };
+                    const val = parseFloat(cell.obtained);
+                    const over = !isNaN(val) && val > comp.maxMarks;
+                    return (
+                      <td key={comp.configId} className="px-1.5 py-1 border-b border-l border-slate-100">
+                        <input
+                          type="number" min={0} max={comp.maxMarks} step={0.5}
+                          disabled={!effectiveCanWrite || cell.absent}
+                          value={cell.absent ? '' : cell.obtained}
+                          onChange={e => updateCell(key, { obtained: e.target.value })}
+                          placeholder={cell.absent ? 'Ab' : '—'}
+                          className={[
+                            'w-16 text-center border rounded px-1 py-0.5 text-xs focus:outline-none focus:ring-1',
+                            over ? 'border-red-400 bg-red-50' : 'border-slate-200 focus:ring-indigo-300',
+                            cell.absent ? 'bg-red-50 opacity-40' : '',
+                          ].join(' ')}
+                        />
+                        {over && <p className="text-xs text-red-500">max {comp.maxMarks}</p>}
+                      </td>
+                    );
+                  }),
+                  <td key={`${subj.subjectId}-ab-${student.studentId}`} className="px-2 py-1 border-b border-l border-slate-100 text-center">
+                    <input type="checkbox" disabled={!effectiveCanWrite}
+                      checked={subj.components.every(c => cells[`${student.studentId}|${c.configId}`]?.absent ?? false)}
+                      onChange={e => {
+                        subj.components.forEach(c =>
+                          updateCell(`${student.studentId}|${c.configId}`, { absent: e.target.checked })
+                        );
+                      }}
+                      className="w-4 h-4 accent-red-500"
+                    />
+                  </td>,
+                ])}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
     </div>
-  );
-}
-
-function MarkCell({ cell, disabled, onChange }: {
-  cell: { obtained: string; absent: boolean; max: string };
-  disabled: boolean;
-  onChange: (patch: Partial<{ obtained: string; absent: boolean; max: string }>) => void;
-}) {
-  return (
-    <td className="px-2 py-1 text-center">
-      {cell.absent ? (
-        <button
-          type="button"
-          onClick={() => !disabled && onChange({ absent: false })}
-          disabled={disabled}
-          className="px-2 py-1 text-xs rounded bg-red-100 text-red-800 font-medium hover:bg-red-200 w-full"
-        >
-          ABSENT
-        </button>
-      ) : (
-        <div className="flex items-center gap-1 justify-center">
-          <input
-            type="number"
-            inputMode="numeric"
-            value={cell.obtained}
-            disabled={disabled}
-            min={0}
-            max={Number(cell.max) || undefined}
-            onChange={(e) => onChange({ obtained: e.target.value })}
-            className="w-14 rounded border border-slate-300 px-1 py-1 text-sm text-center"
-            placeholder="—"
-          />
-          <button
-            type="button"
-            onClick={() => onChange({ absent: true, obtained: '' })}
-            disabled={disabled}
-            className="text-[10px] text-slate-400 hover:text-red-600"
-            title="Mark absent"
-          >
-            A
-          </button>
-        </div>
-      )}
-    </td>
   );
 }

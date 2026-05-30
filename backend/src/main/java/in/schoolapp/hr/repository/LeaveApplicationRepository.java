@@ -23,4 +23,11 @@ public interface LeaveApplicationRepository extends JpaRepository<LeaveApplicati
      */
     List<LeaveApplication> findBySchoolIdAndStaffIdAndStatusAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
         UUID schoolId, UUID staffId, LeaveStatus status, LocalDate to, LocalDate from);
+
+    /**
+     * Any SUBMITTED or APPROVED leave that overlaps [from, to] — used to prevent
+     * double-booking. Two ranges [A,B] and [C,D] overlap when A <= D AND B >= C.
+     */
+    List<LeaveApplication> findBySchoolIdAndStaffIdAndStatusInAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
+        UUID schoolId, UUID staffId, List<LeaveStatus> statuses, LocalDate to, LocalDate from);
 }

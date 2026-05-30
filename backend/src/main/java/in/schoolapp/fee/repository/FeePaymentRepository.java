@@ -11,7 +11,6 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-
 public interface FeePaymentRepository extends JpaRepository<FeePayment, UUID> {
 
     Optional<FeePayment> findByIdAndSchoolId(UUID id, UUID schoolId);
@@ -67,5 +66,79 @@ public interface FeePaymentRepository extends JpaRepository<FeePayment, UUID> {
         String getMode();
         Long   getAmountPaise();
         Long   getPaymentCount();
+    }
+
+    /**
+     * Recent payments for the cashier dashboard — inner-joined with students so the
+     * student name is available without extra N+1 queries.
+     */
+    @Query(value = """
+        SELECT fp.id                                                        AS paymentId,
+               fp.student_id                                               AS studentId,
+               s.first_name || ' ' || COALESCE(s.last_name, '')           AS studentName,
+               fp.amount_paise                                             AS amountPaise,
+               fp.payment_mode                                             AS paymentMode,
+               fp.receipt_number                                           AS receiptNumber,
+               fp.receipt_pdf_url                                          AS receiptPdfUrl,
+               fp.payment_date                                             AS paymentDate
+        FROM fee_payments fp
+        LEFT JOIN students s ON s.id = fp.student_id
+        WHERE fp.school_id = :schoolId
+        ORDER BY fp.created_at DESC
+        LIMIT :lim
+        """, nativeQuery = true)
+    List<RecentPaymentProjection> findRecentBySchool(@Param("schoolId") UUID schoolId,
+                                                     @Param("lim") int limit);
+
+    /** Projection for {@link #findRecentBySchool}. */
+    interface RecentPaymentProjection {
+        UUID   getPaymentId();
+        UUID   getStudentId();
+        String getStudentName();
+        Long   getAmountPaise();
+        String getPaymentMode();
+        String getReceiptNumber();
+        String getReceiptPdfUrl();
+        java.time.LocalDate getPaymentDate();
+    }
+
+    /**
+     * Class-wise collection summary over a date range. Joins fee_payments →
+     * student_enrollments (current) → school_classes for aggregation.
+     */
+    @Query(value = """
+        SELECT sc.id                                    AS classId,
+               sc.name                                  AS className,
+               COALESCE(SUM(fp.amount_paise), 0)        AS collectedPaise,
+               COUNT(fp.id)                             AS paymentCount,
+               COALESCE(SUM(
+                   CASE WHEN fi.status IN ('PENDING','PARTIAL')
+                        THEN fi.amount_due_paise - fi.amount_paid_paise ELSE 0 END
+               ), 0)                                    AS outstandingPaise,
+               COUNT(DISTINCT se.student_id)            AS studentCount
+        FROM school_classes sc
+        JOIN sections sec ON sec.class_id = sc.id
+        JOIN student_enrollments se ON se.section_id = sec.id AND se.status = 'ACTIVE'
+        LEFT JOIN fee_payments fp ON fp.student_id = se.student_id
+            AND fp.school_id = :schoolId
+            AND fp.payment_date BETWEEN :from AND :to
+        LEFT JOIN fee_invoices fi ON fi.student_id = se.student_id
+            AND fi.school_id = :schoolId
+        WHERE sc.school_id = :schoolId
+        GROUP BY sc.id, sc.name
+        ORDER BY sc.name
+        """, nativeQuery = true)
+    List<ClassCollectionProjection> classWiseReport(@Param("schoolId") UUID schoolId,
+                                                    @Param("from") LocalDate from,
+                                                    @Param("to") LocalDate to);
+
+    /** Projection for {@link #classWiseReport}. */
+    interface ClassCollectionProjection {
+        String getClassId();
+        String getClassName();
+        Long   getCollectedPaise();
+        Long   getPaymentCount();
+        Long   getOutstandingPaise();
+        Long   getStudentCount();
     }
 }

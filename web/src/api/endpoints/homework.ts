@@ -9,6 +9,7 @@ export interface AssignmentDto {
   attachmentUrl: string | null;
   dueDate: string | null;
   createdAt: string;
+  createdByStaffId: string | null;
 }
 
 export interface SubmissionDto {

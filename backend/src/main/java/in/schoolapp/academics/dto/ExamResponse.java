@@ -2,6 +2,7 @@ package in.schoolapp.academics.dto;
 
 import in.schoolapp.academics.entity.Exam;
 import in.schoolapp.academics.entity.ExamType;
+import in.schoolapp.academics.entity.ResultStatus;
 
 import java.time.LocalDate;
 import java.util.UUID;
@@ -13,7 +14,10 @@ public record ExamResponse(
     ExamType examType,
     LocalDate startDate,
     LocalDate endDate,
-    boolean published
+    UUID classId,
+    UUID sectionId,
+    boolean published,
+    ResultStatus resultStatus
 ) {
     public static ExamResponse from(Exam e) {
         return new ExamResponse(
@@ -23,7 +27,10 @@ public record ExamResponse(
             e.getExamType(),
             e.getStartDate(),
             e.getEndDate(),
-            e.isPublished()
+            e.getClassId(),
+            e.getSectionId(),
+            e.isPublished(),
+            e.getResultStatus()
         );
     }
 }

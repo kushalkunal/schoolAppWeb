@@ -4,10 +4,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Calendar, Check, X, Clock, Plane, Sun, AlertCircle, Search,
+  Calendar, Check, X, Clock, Plane, Sun, AlertCircle, Search, CheckCircle,
 } from 'lucide-react';
 import { hrApi } from '@/api/endpoints/hr';
 import { schoolApi } from '@/api/endpoints/school';
+import { attendanceApi } from '@/api/endpoints/attendance';
 import { Card, CardBody, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -17,7 +18,8 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { ErrorBanner } from '@/components/ui/ErrorBanner';
 import { useToast } from '@/components/ui/Toast';
 import { hasCode, isApiError } from '@/api/errors';
-import { OWNER_OR_ADMIN, RequireRole } from '@/auth/RequireRole';
+import { OWNER_OR_ADMIN, RequireRole, useHasRole } from '@/auth/RequireRole';
+import { useAuth } from '@/auth/AuthProvider';
 import { cn } from '@/lib/utils';
 import type {
   StaffAttendanceResponse, StaffAttendanceStatus, StaffResponse,
@@ -46,23 +48,65 @@ export default function StaffAttendancePage() {
   const tenantId = typeof params.tenantId === 'string' ? params.tenantId : '';
   const qc = useQueryClient();
   const toast = useToast();
+  const isAdmin = useHasRole(...OWNER_OR_ADMIN);
+  const { state } = useAuth();
+  const myStaffId = state.status === 'authenticated' ? state.claims.sub : '';
 
   const [date, setDate] = useState(todayIso());
   const [search, setSearch] = useState('');
   // Pending changes since last save — keyed by staffId.
   const [pending, setPending] = useState<Record<string, StaffAttendanceStatus>>({});
+  // Teacher self-mark: chosen status before submitting
+  const [selfStatus, setSelfStatus] = useState<StaffAttendanceStatus>('PRESENT');
 
   const staffQ = useQuery({
     queryKey: ['staff', tenantId],
     queryFn: () => schoolApi.listStaff(tenantId),
-    enabled: !!tenantId,
+    enabled: !!tenantId && isAdmin,
   });
 
   const dayQ = useQuery({
     queryKey: ['hr-attendance', tenantId, date],
     queryFn: () => hrApi.listAttendance(tenantId, date),
-    enabled: !!tenantId,
+    enabled: !!tenantId && isAdmin,
     retry: false,
+  });
+
+  // Non-admin teacher: own attendance history (current month)
+  const today = todayIso();
+  const monthStart = today.slice(0, 7) + '-01';
+  const myAttendanceQ = useQuery({
+    queryKey: ['staff-attendance-me', tenantId, monthStart, today],
+    queryFn: () => attendanceApi.myAttendance(tenantId, monthStart, today),
+    enabled: !!tenantId && !!myStaffId && !isAdmin,
+  });
+
+  const markSelfMutation = useMutation({
+    mutationFn: () => attendanceApi.markSelf(tenantId, selfStatus),
+    onSuccess: () => {
+      toast.success('Attendance submitted — awaiting approval');
+      qc.invalidateQueries({ queryKey: ['staff-attendance-me', tenantId] });
+    },
+    onError: (e) => toast.error(isApiError(e) ? e.message : 'Could not submit attendance'),
+  });
+
+  // Admin: pending teacher self-attendances needing approval
+  const pendingApprovalsQ = useQuery({
+    queryKey: ['staff-attendance-pending', tenantId, date],
+    queryFn: () => attendanceApi.staffPendingApprovals(tenantId, date),
+    enabled: !!tenantId && isAdmin,
+    refetchInterval: 30_000,
+  });
+
+  const approveMutation = useMutation({
+    mutationFn: ({ staffId, d }: { staffId: string; d: string }) =>
+      attendanceApi.approveStaff(tenantId, staffId, d),
+    onSuccess: () => {
+      toast.success('Attendance approved');
+      qc.invalidateQueries({ queryKey: ['staff-attendance-pending', tenantId] });
+      qc.invalidateQueries({ queryKey: ['hr-attendance', tenantId] });
+    },
+    onError: (e) => toast.error(isApiError(e) ? e.message : 'Could not approve'),
   });
 
   // Reset pending edits when the day changes or new server data arrives.
@@ -148,7 +192,7 @@ export default function StaffAttendancePage() {
   }, [staffQ.data, search]);
 
   // ---------------- Render ----------------
-  if (staffQ.isLoading) {
+  if (staffQ.isLoading && isAdmin) {
     return <Skeleton className="h-96" />;
   }
 
@@ -162,8 +206,154 @@ export default function StaffAttendancePage() {
     );
   }
 
+  // ---- Non-admin teacher: self-attendance view ----
+  if (!isAdmin) {
+    const todayRecord = myAttendanceQ.data?.find((r) => r.date === todayIso());
+    return (
+      <div className="space-y-5">
+        <div>
+          <h1 className="text-2xl font-semibold">My Attendance</h1>
+          <p className="text-sm text-slate-500">Mark your attendance for today or view your history.</p>
+        </div>
+
+        {/* Mark today */}
+        <Card padding="md">
+          <CardHeader>
+            <CardTitle>Mark today&apos;s attendance</CardTitle>
+            <CardDescription>
+              {todayRecord
+                ? todayRecord.approved
+                  ? `Approved by ${todayRecord.approvedByName ?? 'admin'}`
+                  : 'Submitted — awaiting approval'
+                : 'Not yet submitted for today'}
+            </CardDescription>
+          </CardHeader>
+          <CardBody>
+            <div className="flex flex-wrap items-center gap-3">
+              {(['PRESENT', 'ABSENT', 'LATE', 'HALF_DAY', 'LEAVE'] as StaffAttendanceStatus[]).map((s) => {
+                const meta = STATUS_META[s];
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setSelfStatus(s)}
+                    className={cn(
+                      'px-4 py-2 rounded-brand border text-sm font-medium transition',
+                      selfStatus === s
+                        ? `${meta.bg} ${meta.text} border-transparent`
+                        : 'border-slate-200 text-slate-600 hover:border-slate-400',
+                    )}
+                  >
+                    {meta.label}
+                  </button>
+                );
+              })}
+              <Button
+                className="ml-auto"
+                loading={markSelfMutation.isPending}
+                onClick={() => markSelfMutation.mutate()}
+                glow
+              >
+                <Check size={14} /> Submit
+              </Button>
+            </div>
+          </CardBody>
+        </Card>
+
+        {/* Own attendance history */}
+        <Card padding="none" className="overflow-hidden">
+          <CardHeader>
+            <CardTitle>This month</CardTitle>
+            <CardDescription>Your submitted attendance records</CardDescription>
+          </CardHeader>
+          {myAttendanceQ.isLoading && <CardBody><Skeleton className="h-24" /></CardBody>}
+          {myAttendanceQ.isError && (
+            <CardBody><ErrorBanner error={myAttendanceQ.error} onRetry={() => myAttendanceQ.refetch()} /></CardBody>
+          )}
+          {myAttendanceQ.data && myAttendanceQ.data.length === 0 && (
+            <CardBody>
+              <p className="text-sm text-slate-500 py-6 text-center">No attendance records this month.</p>
+            </CardBody>
+          )}
+          {myAttendanceQ.data && myAttendanceQ.data.length > 0 && (
+            <ul className="divide-y divide-slate-100">
+              {myAttendanceQ.data.map((rec) => {
+                const meta = STATUS_META[rec.status];
+                return (
+                  <li key={rec.id} className="px-5 py-3 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <span className={cn('px-2 py-0.5 rounded text-xs font-medium', meta.bg, meta.text)}>
+                        {meta.short}
+                      </span>
+                      <span className="text-sm text-slate-700">
+                        {new Date(rec.date).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs">
+                      {rec.approved ? (
+                        <Badge tone="success" size="sm" dot>
+                          Approved{rec.approvedByName ? ` by ${rec.approvedByName}` : ''}
+                        </Badge>
+                      ) : (
+                        <Badge tone="warning" size="sm" dot>Pending approval</Badge>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
+      {/* Pending self-attendance approvals */}
+      {(pendingApprovalsQ.data ?? []).length > 0 && (
+        <Card padding="none" className="overflow-hidden border-amber-200 bg-amber-50/50">
+          <CardHeader className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-amber-800">Pending staff self-attendances</CardTitle>
+              <CardDescription className="text-amber-700">
+                These staff members have marked their own attendance and are awaiting your approval.
+              </CardDescription>
+            </div>
+            <Badge tone="warning">{pendingApprovalsQ.data?.length ?? 0}</Badge>
+          </CardHeader>
+          <ul className="divide-y divide-amber-100">
+            {(pendingApprovalsQ.data ?? []).map((rec) => {
+              const meta = STATUS_META[rec.status];
+              return (
+                <li key={rec.id} className="px-5 py-3 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className={cn('px-2 py-0.5 rounded text-xs font-medium', meta.bg, meta.text)}>
+                      {meta.short}
+                    </span>
+                    <span className="text-sm font-medium text-slate-800">{rec.staffName}</span>
+                    <span className="text-xs text-slate-500">
+                      {new Date(rec.date).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
+                    </span>
+                    {rec.notes && (
+                      <span className="text-xs text-slate-500 italic">&quot;{rec.notes}&quot;</span>
+                    )}
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="subtle"
+                    loading={approveMutation.isPending}
+                    onClick={() => approveMutation.mutate({ staffId: rec.staffId, d: rec.date })}
+                  >
+                    <CheckCircle size={14} /> Approve
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+      )}
+
       {/* Date + actions header */}
       <Card padding="md" className="flex flex-wrap items-end gap-3">
         <label className="block flex-1 max-w-xs">

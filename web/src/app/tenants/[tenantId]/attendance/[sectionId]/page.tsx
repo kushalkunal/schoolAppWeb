@@ -11,6 +11,7 @@ import { ErrorBanner } from '@/components/ui/ErrorBanner';
 import { Spinner } from '@/components/ui/Spinner';
 import { Button } from '@/components/ui/Button';
 import { ATTENDANCE_WRITER, useHasRole } from '@/auth/RequireRole';
+import { useAuth } from '@/auth/AuthProvider';
 import { todayIso } from '@/lib/utils';
 import type { AttendanceEntry, AttendanceStatus, StudentResponse } from '@/types/domain';
 
@@ -30,6 +31,10 @@ export default function SectionAttendancePage() {
   const sectionId = typeof params.sectionId === 'string' ? params.sectionId : '';
   const date = searchParams.get('date') ?? todayIso();
   const canMark = useHasRole(...ATTENDANCE_WRITER);
+  const { state } = useAuth();
+  const isPrincipal =
+    state.status === 'authenticated' &&
+    (state.claims.role === 'PRINCIPAL' || state.claims.role === 'SCHOOL_OWNER' || state.claims.role === 'ADMIN');
   const qc = useQueryClient();
 
   // Existing attendance records for this section + date.
@@ -63,8 +68,8 @@ export default function SectionAttendancePage() {
   useEffect(() => {
     if (records.data === undefined) return;
     const m = new Map<string, AttendanceStatus>();
-    records.data.forEach((r) => m.set(r.studentId, r.status));
-    if (records.data.length === 0 && roster.data) {
+    records.data.records.forEach((r) => m.set(r.studentId, r.status));
+    if (records.data.records.length === 0 && roster.data) {
       roster.data.forEach((s) => m.set(s.id, 'PRESENT'));
     }
     setStatuses(m);
@@ -96,10 +101,12 @@ export default function SectionAttendancePage() {
   const nameByStudentId = new Map<string, StudentResponse>();
   allStudents.data?.items.forEach((s) => nameByStudentId.set(s.id, s));
 
-  const recordsList = records.data ?? [];
+  const sectionData = records.data;
+  const isLocked = sectionData?.locked ?? false;
+  const recordsList = sectionData?.records ?? [];
   const rosterList = roster.data ?? [];
-  // Prefer existing records (preserves their order); otherwise fall back to the section
-  // roster so a brand-new class can still mark attendance from this screen.
+  // Effective write permission: can mark AND (not locked OR is principal/admin)
+  const effectiveCanMark = canMark && (!isLocked || isPrincipal);
   const rowSource: { studentId: string }[] = recordsList.length > 0
     ? recordsList
     : rosterList.map((s) => ({ studentId: s.id }));
@@ -119,12 +126,26 @@ export default function SectionAttendancePage() {
           <h1 className="text-2xl font-semibold mt-1">Section attendance</h1>
           <p className="text-sm text-slate-500">{date}</p>
         </div>
-        {canMark && submit.isSuccess && (
+        {effectiveCanMark && submit.isSuccess && (
           <span className="text-sm text-green-700">
             Saved · {submit.data.notificationsQueued} parent alert(s) queued
           </span>
         )}
       </div>
+
+      {/* Lock banners */}
+      {isLocked && !isPrincipal && (
+        <div className="rounded border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+          🔒 Attendance locked by <strong>{sectionData?.lockedByName ?? 'class teacher'}</strong>.
+          Contact the Principal to make corrections.
+        </div>
+      )}
+      {isLocked && isPrincipal && (
+        <div className="rounded border border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          ⚠️ This attendance is locked (submitted by {sectionData?.lockedByName ?? 'class teacher'}).
+          As Principal, you can override and re-save.
+        </div>
+      )}
 
       {submit.isError && <ErrorBanner error={submit.error} />}
 
@@ -135,9 +156,9 @@ export default function SectionAttendancePage() {
               ? 'No students enrolled in this section yet'
               : `${rowSource.length} students · ${counts.PRESENT} present · ${counts.ABSENT} absent · ${counts.LATE} late`}
           </CardTitle>
-          {canMark && rowSource.length > 0 && (
+          {effectiveCanMark && rowSource.length > 0 && (
             <Button onClick={() => submit.mutate()} disabled={submit.isPending}>
-              {submit.isPending ? 'Saving…' : (isFirstMark ? 'Submit attendance' : 'Save changes')}
+              {submit.isPending ? 'Saving…' : (isFirstMark ? 'Submit attendance' : isPrincipal && isLocked ? 'Save & Override' : 'Save changes')}
             </Button>
           )}
         </CardHeader>
@@ -150,7 +171,7 @@ export default function SectionAttendancePage() {
             </p>
           ) : (
             <>
-              {isFirstMark && (
+              {isFirstMark && !isLocked && (
                 <div className="mb-3 text-xs text-slate-600 bg-primary-soft/40 border border-primary/20 rounded px-3 py-2">
                   First mark for {date}. Everyone defaults to <b>PRESENT</b> — tap a row to cycle to
                   Absent / Late / Half-day / Leave, then Submit.
@@ -172,9 +193,9 @@ export default function SectionAttendancePage() {
                     </div>
                     <StatusButton
                       status={current}
-                      readonly={!canMark}
+                      readonly={!effectiveCanMark}
                       onClick={() => {
-                        if (!canMark) return;
+                        if (!effectiveCanMark) return;
                         const next = STATUS_CYCLE[(STATUS_CYCLE.indexOf(current) + 1) % STATUS_CYCLE.length]!;
                         const m = new Map(statuses);
                         m.set(r.studentId, next);

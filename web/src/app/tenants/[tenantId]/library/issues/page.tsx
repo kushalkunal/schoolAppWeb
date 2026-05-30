@@ -20,7 +20,7 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { ErrorBanner } from '@/components/ui/ErrorBanner';
 import { useToast } from '@/components/ui/Toast';
 import { hasCode, isApiError } from '@/api/errors';
-import { OWNER_OR_ADMIN, RequireRole } from '@/auth/RequireRole';
+import { LIBRARY_WRITER, RequireRole } from '@/auth/RequireRole';
 import { cn } from '@/lib/utils';
 
 export default function IssuesPage() {
@@ -106,7 +106,7 @@ export default function IssuesPage() {
 
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-slate-900">Books currently issued</h2>
-        <RequireRole roles={OWNER_OR_ADMIN}>
+        <RequireRole roles={LIBRARY_WRITER}>
           <Button onClick={() => setIssueOpen(true)}><Plus size={14} /> Issue book</Button>
         </RequireRole>
       </div>
@@ -122,7 +122,7 @@ export default function IssuesPage() {
           title="No books currently out"
           description="Issue a book to a student to start tracking returns."
           action={
-            <RequireRole roles={OWNER_OR_ADMIN}>
+            <RequireRole roles={LIBRARY_WRITER}>
               <Button onClick={() => setIssueOpen(true)}><Plus size={14} /> Issue book</Button>
             </RequireRole>
           }
@@ -187,7 +187,7 @@ function IssueRow({
           </span>
         </div>
       </div>
-      <RequireRole roles={OWNER_OR_ADMIN}>
+      <RequireRole roles={LIBRARY_WRITER}>
         <Button variant="secondary" size="sm" onClick={onReturn} loading={busy}>
           <RotateCcw size={14} /> Return
         </Button>

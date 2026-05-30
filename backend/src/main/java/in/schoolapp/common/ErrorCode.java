@@ -46,6 +46,7 @@ public enum ErrorCode {
     // ---------- Attendance ----------
     ATTENDANCE_ALREADY_SUBMITTED(HttpStatus.CONFLICT),
     ATTENDANCE_RECORD_NOT_FOUND(HttpStatus.NOT_FOUND),
+    LEAVE_OVERLAP(HttpStatus.CONFLICT),
 
     // ---------- Fee ----------
     INVOICE_NOT_FOUND(HttpStatus.NOT_FOUND),

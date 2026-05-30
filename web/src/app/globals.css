@@ -21,11 +21,23 @@
 @layer base {
   html, body {
     height: 100%;
+    /* Prevent elastic overscroll on iOS — keeps the app feeling native */
+    overscroll-behavior: none;
   }
   body {
     font-feature-settings: 'cv11', 'ss01', 'ss03';
     -webkit-font-smoothing: antialiased;
+    /* Momentum scrolling on iOS */
+    -webkit-overflow-scrolling: touch;
     @apply bg-slate-50 text-slate-900 font-sans;
+  }
+  /* Remove tap highlight on mobile — taps should feel instant */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* Smooth font rendering on high-DPI displays */
+  @supports (font-smooth: always) {
+    body { font-smooth: always; }
   }
   /* Tighten heading rhythm; the default Tailwind reset is too loose for SaaS dashboards. */
   h1, h2, h3, h4 { @apply tracking-tight; }

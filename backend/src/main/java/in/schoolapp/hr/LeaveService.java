@@ -2,9 +2,12 @@ package in.schoolapp.hr;
 
 import in.schoolapp.common.AppException;
 import in.schoolapp.common.ErrorCode;
+import in.schoolapp.common.TenantContext;
 import in.schoolapp.hr.dto.LeaveApplicationRequest;
 import in.schoolapp.hr.dto.LeaveApplicationResponse;
+import in.schoolapp.hr.dto.LeaveBalanceResponse;
 import in.schoolapp.hr.dto.LeaveDecisionRequest;
+import in.schoolapp.hr.dto.UpdateLeaveBalanceRequest;
 import in.schoolapp.hr.entity.LeaveApplication;
 import in.schoolapp.hr.entity.LeaveApplication.LeaveStatus;
 import in.schoolapp.hr.entity.LeaveBalance;
@@ -49,6 +52,29 @@ public class LeaveService {
         }
         if (req.days().signum() <= 0) {
             throw new AppException(ErrorCode.VALIDATION_ERROR, "days must be positive");
+        }
+
+        // RBAC: non-admin staff may only submit leave for themselves.
+        // PRINCIPAL / ADMIN / SCHOOL_OWNER may file on behalf of any staff member.
+        String role = TenantContext.getRole();
+        boolean isAdmin = "PRINCIPAL".equals(role) || "ADMIN".equals(role) || "SCHOOL_OWNER".equals(role);
+        if (!isAdmin) {
+            UUID selfId = TenantContext.getStaffId();
+            if (!req.staffId().equals(selfId)) {
+                throw new AppException(ErrorCode.FORBIDDEN,
+                    "You may only submit leave applications for yourself.");
+            }
+        }
+
+        // Reject if there is already a SUBMITTED or APPROVED leave that overlaps this range.
+        List<LeaveApplication> overlaps = applicationRepository
+            .findBySchoolIdAndStaffIdAndStatusInAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
+                tenantId, req.staffId(),
+                List.of(LeaveStatus.SUBMITTED, LeaveStatus.APPROVED),
+                req.endDate(), req.startDate());
+        if (!overlaps.isEmpty()) {
+            throw new AppException(ErrorCode.LEAVE_OVERLAP,
+                "You already have an ongoing leave request during these dates.");
         }
 
         LeaveApplication app = new LeaveApplication();
@@ -113,16 +139,56 @@ public class LeaveService {
             .stream().map(LeaveApplicationResponse::from).toList();
     }
 
+    /** Staff (or admin) views their own leave balances for a given year. */
+    public List<LeaveBalanceResponse> listBalances(UUID tenantId, UUID staffId, int year) {
+        return balanceRepository
+            .findBySchoolIdAndStaffIdAndYearOrderByLeaveType(tenantId, staffId, year)
+            .stream().map(LeaveBalanceResponse::from).toList();
+    }
+
+    /** Admin updates the entitled days for a specific balance row. Creates the row if absent. */
+    @Transactional
+    public LeaveBalanceResponse updateBalance(UUID tenantId, UUID staffId,
+                                             in.schoolapp.hr.entity.LeaveApplication.LeaveType leaveType,
+                                             int year, UpdateLeaveBalanceRequest req) {
+        LeaveBalance bal = balanceRepository
+            .findBySchoolIdAndStaffIdAndLeaveTypeAndYear(tenantId, staffId, leaveType, year)
+            .orElseGet(() -> {
+                LeaveBalance fresh = new LeaveBalance();
+                fresh.setSchoolId(tenantId);
+                fresh.setStaffId(staffId);
+                fresh.setLeaveType(leaveType);
+                fresh.setYear(year);
+                fresh.setConsumedDays(BigDecimal.ZERO);
+                return fresh;
+            });
+        bal.setEntitledDays(req.entitledDays());
+        bal = balanceRepository.save(bal);
+        log.info("Updated leave balance tenant={} staff={} type={} year={} entitled={}",
+            tenantId, staffId, leaveType, year, req.entitledDays());
+        return LeaveBalanceResponse.from(bal);
+    }
+
     /** delta is positive for "consume" and negative for "refund" (cancellation). */
     private void adjustBalance(LeaveApplication app, BigDecimal delta) {
         int year = app.getStartDate().getYear();
         LeaveBalance bal = balanceRepository
             .findBySchoolIdAndStaffIdAndLeaveTypeAndYear(
                 app.getSchoolId(), app.getStaffId(), app.getLeaveType(), year)
-            .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND,
-                "No leave balance row for staff=" + app.getStaffId()
-                    + " type=" + app.getLeaveType() + " year=" + year
-                    + ". Seed entitlements first."));
+            .orElseGet(() -> {
+                // Auto-seed a default entitlement so first-time approvals don't fail.
+                // HR can always edit the row later via POST /leave-balances.
+                log.warn("No leave balance row for staff={} type={} year={}. Auto-seeding default entitlement.",
+                    app.getStaffId(), app.getLeaveType(), year);
+                LeaveBalance fresh = new LeaveBalance();
+                fresh.setSchoolId(app.getSchoolId());
+                fresh.setStaffId(app.getStaffId());
+                fresh.setLeaveType(app.getLeaveType());
+                fresh.setYear(year);
+                fresh.setEntitledDays(new BigDecimal("30"));
+                fresh.setConsumedDays(BigDecimal.ZERO);
+                return balanceRepository.save(fresh);
+            });
         bal.setConsumedDays(bal.getConsumedDays().add(delta));
         balanceRepository.save(bal);
     }

@@ -190,11 +190,14 @@ public class StudentService {
     public Page<StudentResponse> listStudents(UUID tenantId, String search, int page, int size) {
         int pageSize = clamp(size, 1, MAX_PAGE_SIZE);
         int pageNum = Math.max(page, 0);
-        var pageable = PageRequest.of(pageNum, pageSize, Sort.by("firstName"));
+        var sortedPageable = PageRequest.of(pageNum, pageSize, Sort.by("firstName"));
+        // Native search query already orders by first_name in SQL; use unsorted Pageable to avoid
+        // duplicate ORDER BY clause that would fail with the Java field name "firstName" (DB: first_name).
+        var unsortedPageable = PageRequest.of(pageNum, pageSize);
 
         Page<Student> students = (search == null || search.isBlank())
-            ? studentRepository.findBySchoolIdAndActiveTrue(tenantId, pageable)
-            : studentRepository.searchBySchoolId(tenantId, search.trim(), pageable);
+            ? studentRepository.findBySchoolIdAndActiveTrue(tenantId, sortedPageable)
+            : studentRepository.searchBySchoolId(tenantId, search.trim(), unsortedPageable);
 
         return students.map(StudentResponse::from);
     }

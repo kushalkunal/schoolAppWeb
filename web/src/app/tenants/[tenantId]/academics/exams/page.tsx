@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ClipboardCheck, Plus } from 'lucide-react';
+import { ClipboardCheck, Plus, Settings2, BarChart2, FileText } from 'lucide-react';
 import { academicsApi } from '@/api/endpoints/academics';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -13,9 +13,11 @@ import { Modal } from '@/components/ui/Modal';
 import { ErrorBanner } from '@/components/ui/ErrorBanner';
 import { Spinner } from '@/components/ui/Spinner';
 import { OWNER_OR_ADMIN, RequireRole } from '@/auth/RequireRole';
-import type { CreateExamRequest, ExamType } from '@/types/domain';
+import type { CreateExamRequest, ExamType, ResultStatus } from '@/types/domain';
 
-const EXAM_TYPES: ExamType[] = ['UNIT_TEST', 'TERM', 'ANNUAL', 'MOCK', 'ACTIVITY'];
+const EXAM_TYPES: ExamType[] = [
+  'UNIT_TEST', 'MID_TERM', 'TERM', 'FINAL_EXAM', 'ANNUAL', 'PRACTICAL', 'ASSESSMENT', 'INTERNAL', 'MOCK', 'ACTIVITY',
+];
 
 export default function ExamsPage() {
   const params = useParams();
@@ -27,11 +29,6 @@ export default function ExamsPage() {
     queryKey: ['exams', tenantId],
     queryFn: () => academicsApi.listExams(tenantId),
     enabled: !!tenantId,
-  });
-
-  const publish = useMutation({
-    mutationFn: (examId: string) => academicsApi.publishExam(tenantId, examId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['exams', tenantId] }),
   });
 
   return (
@@ -50,7 +47,6 @@ export default function ExamsPage() {
 
       {q.isLoading && <Spinner />}
       {q.isError && <ErrorBanner error={q.error} onRetry={() => q.refetch()} />}
-      {publish.isError && <ErrorBanner error={publish.error} />}
 
       {q.data && q.data.length === 0 && (
         <Card>
@@ -69,7 +65,7 @@ export default function ExamsPage() {
                 <th className="text-left px-4 py-2 font-medium">Name</th>
                 <th className="text-left px-4 py-2 font-medium">Type</th>
                 <th className="text-left px-4 py-2 font-medium">Dates</th>
-                <th className="text-left px-4 py-2 font-medium">Status</th>
+                <th className="text-left px-4 py-2 font-medium">Result</th>
                 <th className="text-right px-4 py-2 font-medium">Actions</th>
               </tr>
             </thead>
@@ -83,27 +79,34 @@ export default function ExamsPage() {
                     {e.endDate && e.endDate !== e.startDate && ` → ${new Date(e.endDate).toLocaleDateString()}`}
                   </td>
                   <td className="px-4 py-2">
-                    {e.published
-                      ? <span className="px-2 py-0.5 rounded text-xs bg-green-100 text-green-800">Published</span>
-                      : <span className="px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-800">Draft</span>}
+                    <ResultStatusBadge status={e.resultStatus ?? 'DRAFT'} />
                   </td>
-                  <td className="px-4 py-2 text-right">
+                  <td className="px-4 py-2 text-right space-x-2">
                     <Link
                       href={`/tenants/${tenantId}/academics/exams/${e.id}/marks`}
-                      className="text-primary hover:underline mr-3 text-sm"
+                      className="text-indigo-600 hover:underline text-sm"
                     >
-                      Enter marks
+                      Marks
                     </Link>
                     <RequireRole roles={OWNER_OR_ADMIN}>
-                      {!e.published && (
-                        <Button variant="ghost" size="sm" onClick={() => {
-                          if (confirm(`Publish "${e.name}"? Marks become read-only and report cards become visible to parents.`)) {
-                            publish.mutate(e.id);
-                          }
-                        }} disabled={publish.isPending}>
-                          Publish
-                        </Button>
-                      )}
+                      <Link
+                        href={`/tenants/${tenantId}/academics/exams/${e.id}/structure`}
+                        className="text-slate-600 hover:underline text-sm inline-flex items-center gap-0.5"
+                      >
+                        <Settings2 size={13} />Structure
+                      </Link>
+                      <Link
+                        href={`/tenants/${tenantId}/academics/exams/${e.id}/results`}
+                        className="text-slate-600 hover:underline text-sm inline-flex items-center gap-0.5"
+                      >
+                        <BarChart2 size={13} />Results
+                      </Link>
+                      <Link
+                        href={`/tenants/${tenantId}/academics/exams/${e.id}/admit-cards`}
+                        className="text-slate-600 hover:underline text-sm inline-flex items-center gap-0.5"
+                      >
+                        <FileText size={13} />Admit Cards
+                      </Link>
                     </RequireRole>
                   </td>
                 </tr>
@@ -121,6 +124,16 @@ export default function ExamsPage() {
       />
     </div>
   );
+}
+
+function ResultStatusBadge({ status }: { status: ResultStatus | string }) {
+  const map: Record<string, { label: string; cls: string }> = {
+    DRAFT:     { label: 'Draft',     cls: 'bg-slate-100 text-slate-500' },
+    READY:     { label: 'Ready',     cls: 'bg-blue-50 text-blue-600' },
+    PUBLISHED: { label: 'Published', cls: 'bg-green-50 text-green-700' },
+  };
+  const s = map[status] ?? map.DRAFT;
+  return <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${s.cls}`}>{s.label}</span>;
 }
 
 function CreateExamModal({ open, tenantId, onClose, onSuccess }: {
@@ -153,7 +166,7 @@ function CreateExamModal({ open, tenantId, onClose, onSuccess }: {
             onChange={(e) => setForm({ ...form, examType: e.target.value as ExamType })}
             className="block w-full rounded border border-slate-300 px-3 py-2 text-sm"
           >
-            {EXAM_TYPES.map((t) => <option key={t} value={t}>{t.replace('_', ' ')}</option>)}
+            {EXAM_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
           </select>
         </label>
         <div className="grid grid-cols-2 gap-3">

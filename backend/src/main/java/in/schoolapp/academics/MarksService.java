@@ -13,6 +13,7 @@ import in.schoolapp.academics.entity.Subject;
 import in.schoolapp.academics.repository.ExamMarkRepository;
 import in.schoolapp.academics.repository.ExamMarkRepository.SubjectCompletionRow;
 import in.schoolapp.academics.repository.SubjectRepository;
+import in.schoolapp.academics.repository.TeacherSubjectAssignmentRepository;
 import in.schoolapp.common.AppException;
 import in.schoolapp.common.ErrorCode;
 import in.schoolapp.common.TenantContext;
@@ -54,6 +55,7 @@ public class MarksService {
     private final StudentEnrollmentRepository enrollmentRepository;
     private final SchoolService schoolService;
     private final GradeCalculator gradeCalculator;
+    private final TeacherSubjectAssignmentRepository teacherAssignmentRepository;
 
     @Transactional
     public List<MarkResponse> submitBulk(UUID tenantId, UUID examId, BulkMarksRequest req) {
@@ -78,6 +80,25 @@ public class MarksService {
             if (!subjectsById.containsKey(sid)) {
                 throw new AppException(ErrorCode.RESOURCE_NOT_FOUND,
                     "Subject not found in this tenant: " + sid);
+            }
+        }
+
+        // Subject-teacher authorization: a SUBJECT_TEACHER may only enter marks for subjects
+        // they are explicitly assigned to teach in this section and academic year.
+        // PRINCIPAL, SCHOOL_OWNER, ADMIN, and CLASS_TEACHER are not subject-restricted.
+        String requesterRole = TenantContext.getRole();
+        if ("SUBJECT_TEACHER".equals(requesterRole)) {
+            UUID academicYearId = section.getAcademicYearId();
+            for (UUID subjectId : submittedSubjectIds) {
+                boolean isAssigned = teacherAssignmentRepository
+                    .existsByStaffIdAndSubjectIdAndSectionIdAndAcademicYearId(
+                        staffId, subjectId, section.getId(), academicYearId);
+                if (!isAssigned) {
+                    Subject subject = subjectsById.get(subjectId);
+                    throw new AppException(ErrorCode.FORBIDDEN,
+                        "You are not assigned to teach " + subject.getName()
+                            + " in this section. Only the assigned subject teacher may enter marks.");
+                }
             }
         }
 

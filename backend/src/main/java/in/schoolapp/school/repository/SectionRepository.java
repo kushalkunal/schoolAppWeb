@@ -19,6 +19,11 @@ public interface SectionRepository extends JpaRepository<Section, UUID> {
 
     List<Section> findByClassIdAndAcademicYearIdOrderByName(UUID classId, UUID academicYearId);
 
+    /** Returns all sections in a school that have the given staff member set as class teacher. */
+    List<Section> findByClassTeacherIdAndSchoolId(UUID classTeacherId, UUID schoolId);
+
+    Optional<Section> findByIdAndSchoolId(UUID id, UUID schoolId);
+
     /**
      * Sections in the current academic year that have no {@code attendance_records} row for
      * the given date — feeds {@link in.schoolapp.analytics.detector.AttendanceNotSubmittedDetector}

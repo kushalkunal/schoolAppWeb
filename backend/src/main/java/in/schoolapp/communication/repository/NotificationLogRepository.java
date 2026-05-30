@@ -1,6 +1,9 @@
 package in.schoolapp.communication.repository;
 
 import in.schoolapp.communication.entity.NotificationLog;
+import in.schoolapp.communication.entity.NotificationStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -19,4 +22,15 @@ public interface NotificationLogRepository extends JpaRepository<NotificationLog
      */
     List<NotificationLog> findTop5BySchoolIdAndRecipientPhoneOrderByCreatedAtDesc(
         UUID schoolId, String recipientPhone);
+
+    // ── Paged queries for NotificationLogController ──────────────────────────
+
+    Page<NotificationLog> findBySchoolId(UUID schoolId, Pageable pageable);
+
+    Page<NotificationLog> findBySchoolIdAndStatus(UUID schoolId, NotificationStatus status, Pageable pageable);
+
+    Page<NotificationLog> findBySchoolIdAndEventType(UUID schoolId, String eventType, Pageable pageable);
+
+    Page<NotificationLog> findBySchoolIdAndStatusAndEventType(
+        UUID schoolId, NotificationStatus status, String eventType, Pageable pageable);
 }

@@ -30,5 +30,8 @@ export function useHasRole(...allowed: StaffRole[]): boolean {
 export const OWNER_OR_ADMIN: StaffRole[] = ['SCHOOL_OWNER', 'PRINCIPAL', 'ADMIN'];
 export const ANY_TEACHER:    StaffRole[] = ['SCHOOL_OWNER', 'PRINCIPAL', 'ADMIN', 'CLASS_TEACHER', 'SUBJECT_TEACHER'];
 export const FEE_WRITER:     StaffRole[] = ['SCHOOL_OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT'];
+export const LIBRARY_WRITER: StaffRole[] = ['SCHOOL_OWNER', 'PRINCIPAL', 'ADMIN', 'LIBRARIAN'];
+/** Can edit fee structure (create versions, set class amounts, activate). Accountant is read-only. */
+export const FEE_CONFIG_EDITOR: StaffRole[] = ['SCHOOL_OWNER', 'PRINCIPAL', 'ADMIN'];
 export const ATTENDANCE_WRITER: StaffRole[] = ['SCHOOL_OWNER', 'PRINCIPAL', 'ADMIN', 'CLASS_TEACHER'];
 export const MARKS_WRITER:      StaffRole[] = ['SCHOOL_OWNER', 'PRINCIPAL', 'ADMIN', 'CLASS_TEACHER', 'SUBJECT_TEACHER'];

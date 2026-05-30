@@ -75,6 +75,10 @@ public class ExamMark {
     @Column(name = "is_draft", nullable = false)
     private boolean draft = true;
 
+    /** Optional per-subject teacher remark (e.g. "Needs improvement in algebra"). */
+    @Column(columnDefinition = "TEXT")
+    private String remarks;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;

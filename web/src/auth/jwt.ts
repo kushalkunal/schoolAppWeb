@@ -1,7 +1,7 @@
 /** JWT claim shape — mirrors backend's JwtService.JwtClaims. */
 export type StaffRole =
   | 'SUPER_ADMIN' | 'SCHOOL_OWNER' | 'PRINCIPAL' | 'ADMIN'
-  | 'CLASS_TEACHER' | 'SUBJECT_TEACHER' | 'ACCOUNTANT' | 'VIEWER';
+  | 'CLASS_TEACHER' | 'SUBJECT_TEACHER' | 'ACCOUNTANT' | 'LIBRARIAN' | 'VIEWER';
 
 export interface JwtClaims {
   sub: string;       // staffId UUID

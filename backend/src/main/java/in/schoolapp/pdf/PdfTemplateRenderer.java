@@ -5,7 +5,7 @@ package in.schoolapp.pdf;
  * swap to:
  *
  * <ul>
- *   <li>headless Chromium (richer CSS, web fonts, JS) — via Playwright service</li>
+ *   <li>headless Chromium (richer CSS, web fonts, JS) — via   service</li>
  *   <li>Cloudconvert / DocRaptor (paid, hosted)</li>
  *   <li>AWS Textract pipeline (when the input is already a PDF and we just stamp)</li>
  * </ul>
