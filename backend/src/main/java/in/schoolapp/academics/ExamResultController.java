@@ -135,8 +135,22 @@ public class ExamResultController {
     }
 
     /**
+     * Class-teacher verification gate (audit #7): the section's class teacher (or an admin)
+     * reviews the computed results and marks them VERIFIED. Required before publish.
+     */
+    @PostMapping("/exams/{examId}/results/verify/{sectionId}")
+    @PreAuthorize(AppRoles.ANY_TEACHER)
+    public ApiResponse<List<ExamResultResponse>> verifyResults(
+        @PathVariable UUID tenantId,
+        @PathVariable UUID examId,
+        @PathVariable UUID sectionId
+    ) {
+        return ApiResponse.success(resultService.verifySection(tenantId, examId, sectionId));
+    }
+
+    /**
      * Publish results for a section: flips status to {@code PUBLISHED}, generates PDFs,
-     * and sends WhatsApp + email notifications to parents.
+     * and sends WhatsApp + email notifications to parents. Requires class-teacher verification.
      */
     @PostMapping("/exams/{examId}/results/publish/{sectionId}")
     @PreAuthorize(AppRoles.OWNER_OR_ADMIN)

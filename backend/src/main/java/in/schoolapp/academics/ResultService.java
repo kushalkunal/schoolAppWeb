@@ -193,12 +193,59 @@ public class ResultService {
     }
 
     // ------------------------------------------------------------------
+    // Verify (class-teacher review gate — audit #7)
+    // ------------------------------------------------------------------
+
+    /**
+     * The section's class teacher (or an admin/owner) reviews the computed results and marks them
+     * {@code VERIFIED}. Publishing requires this step, so a principal never publishes results the
+     * class teacher hasn't signed off — Subject Teacher → Class Teacher verify → Principal publish.
+     */
+    @Transactional
+    public List<ExamResultResponse> verifySection(UUID tenantId, UUID examId, UUID sectionId) {
+        Exam exam = examService.getExamOrThrow(tenantId, examId);
+        requireClassTeacherOrAdmin(tenantId, sectionId);
+
+        List<ExamResult> ready = resultRepository
+            .findByExamIdAndSectionIdAndStatus(examId, sectionId, ResultStatus.READY);
+        if (ready.isEmpty()) {
+            throw new AppException(ErrorCode.VALIDATION_ERROR,
+                "No READY results to verify. Compute results first.");
+        }
+        ready.forEach(r -> {
+            r.setStatus(ResultStatus.VERIFIED);
+            resultRepository.save(r);
+        });
+        exam.setResultStatus(ResultStatus.VERIFIED);
+
+        auditLogger.logAction(tenantId, "ExamResult", examId, "VERIFY_RESULTS",
+            Map.of("sectionId", sectionId, "verifiedById", String.valueOf(in.schoolapp.common.TenantContext.getStaffId()),
+                "count", ready.size()));
+        log.info("Verified results examId={} sectionId={} count={} by={}",
+            examId, sectionId, ready.size(), in.schoolapp.common.TenantContext.getStaffId());
+        return getResultsForSection(tenantId, examId, sectionId);
+    }
+
+    /** A section's class teacher, or an admin/owner, may verify. */
+    private void requireClassTeacherOrAdmin(UUID tenantId, UUID sectionId) {
+        String role = in.schoolapp.common.TenantContext.getRole();
+        if ("SCHOOL_OWNER".equals(role) || "PRINCIPAL".equals(role) || "ADMIN".equals(role)) {
+            return;
+        }
+        var section = classSectionService.getSectionOrThrow(tenantId, sectionId);
+        if (!java.util.Objects.equals(section.getClassTeacherId(), in.schoolapp.common.TenantContext.getStaffId())) {
+            throw new AppException(ErrorCode.FORBIDDEN,
+                "Only the section's class teacher (or an admin) can verify results.");
+        }
+    }
+
+    // ------------------------------------------------------------------
     // Publish
     // ------------------------------------------------------------------
 
     /**
-     * Publishes all {@code READY} results in the section, triggers PDF generation, and fires
-     * notification events.
+     * Publishes all {@code VERIFIED} results in the section, triggers PDF generation, and fires
+     * notification events. Results must have been class-teacher-verified first (audit #7).
      */
     @Transactional
     public List<ExamResultResponse> publishSection(UUID tenantId, UUID examId, UUID sectionId) {
@@ -206,10 +253,10 @@ public class ResultService {
         classSectionService.getSectionOrThrow(tenantId, sectionId);
 
         List<ExamResult> readyResults = resultRepository
-            .findByExamIdAndSectionIdAndStatus(examId, sectionId, ResultStatus.READY);
+            .findByExamIdAndSectionIdAndStatus(examId, sectionId, ResultStatus.VERIFIED);
         if (readyResults.isEmpty()) {
             throw new AppException(ErrorCode.VALIDATION_ERROR,
-                "No READY results found. Run Compute Results first.");
+                "No VERIFIED results found. The class teacher must verify results before publishing.");
         }
 
         OffsetDateTime now = OffsetDateTime.now();
