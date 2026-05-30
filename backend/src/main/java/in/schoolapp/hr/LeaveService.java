@@ -1,5 +1,6 @@
 package in.schoolapp.hr;
 
+import in.schoolapp.audit.AuditLogger;
 import in.schoolapp.common.AppException;
 import in.schoolapp.common.ErrorCode;
 import in.schoolapp.common.TenantContext;
@@ -21,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -44,6 +46,7 @@ public class LeaveService {
 
     private final LeaveApplicationRepository applicationRepository;
     private final LeaveBalanceRepository balanceRepository;
+    private final AuditLogger audit;
 
     @Transactional
     public LeaveApplicationResponse submit(UUID tenantId, LeaveApplicationRequest req) {
@@ -101,15 +104,27 @@ public class LeaveService {
                 "Only SUBMITTED applications can be decided (this one is " + app.getStatus() + ")");
         }
         if (req.approve()) {
-            adjustBalance(app, app.getDays());
+            // Segregation of duties: an approver may not approve their own leave (audit #10).
+            if (app.getStaffId().equals(TenantContext.getStaffId())) {
+                throw new AppException(ErrorCode.APPROVAL_SELF_NOT_ALLOWED,
+                    "You cannot approve your own leave application.");
+            }
+            consume(app);   // balance-gated; throws if no entitlement or insufficient days
             app.setStatus(LeaveStatus.APPROVED);
         } else {
             app.setStatus(LeaveStatus.REJECTED);
         }
         app.setDecidedAt(OffsetDateTime.now());
+        app.setDecidedById(TenantContext.getStaffId());
         app.setDecisionNote(req.note());
         app = applicationRepository.save(app);
-        log.info("Leave decided tenant={} app={} status={}", tenantId, applicationId, app.getStatus());
+        audit.logAction(tenantId, "LeaveApplication", app.getId(),
+            req.approve() ? "LEAVE_APPROVED" : "LEAVE_REJECTED",
+            Map.of("staffId", String.valueOf(app.getStaffId()),
+                "leaveType", app.getLeaveType().name(),
+                "days", app.getDays().toPlainString()));
+        log.info("Leave decided tenant={} app={} status={} by={}",
+            tenantId, applicationId, app.getStatus(), TenantContext.getStaffId());
         return LeaveApplicationResponse.from(app);
     }
 
@@ -119,8 +134,7 @@ public class LeaveService {
             .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Leave application not found"));
         if (app.getStatus() == LeaveStatus.CANCELLED) return LeaveApplicationResponse.from(app);
         if (app.getStatus() == LeaveStatus.APPROVED) {
-            // Refund balance.
-            adjustBalance(app, app.getDays().negate());
+            refund(app);   // give the consumed days back
         }
         app.setStatus(LeaveStatus.CANCELLED);
         app.setDecidedAt(OffsetDateTime.now());
@@ -169,27 +183,35 @@ public class LeaveService {
         return LeaveBalanceResponse.from(bal);
     }
 
-    /** delta is positive for "consume" and negative for "refund" (cancellation). */
-    private void adjustBalance(LeaveApplication app, BigDecimal delta) {
+    /**
+     * Consume balance for an approval. Requires a configured entitlement and enough remaining
+     * days — no silent auto-seed, so an approval can never grant un-budgeted leave (audit #10).
+     */
+    private void consume(LeaveApplication app) {
+        LeaveBalance bal = requireBalance(app);
+        if (bal.remainingDays().compareTo(app.getDays()) < 0) {
+            throw new AppException(ErrorCode.LEAVE_BALANCE_INSUFFICIENT,
+                "Insufficient " + app.getLeaveType() + " balance: " + bal.remainingDays().toPlainString()
+                    + " day(s) remaining, " + app.getDays().toPlainString() + " requested.");
+        }
+        bal.setConsumedDays(bal.getConsumedDays().add(app.getDays()));
+        balanceRepository.save(bal);
+    }
+
+    /** Give days back when an approved leave is cancelled; never drives consumed below zero. */
+    private void refund(LeaveApplication app) {
+        LeaveBalance bal = requireBalance(app);
+        bal.setConsumedDays(bal.getConsumedDays().subtract(app.getDays()).max(BigDecimal.ZERO));
+        balanceRepository.save(bal);
+    }
+
+    private LeaveBalance requireBalance(LeaveApplication app) {
         int year = app.getStartDate().getYear();
-        LeaveBalance bal = balanceRepository
+        return balanceRepository
             .findBySchoolIdAndStaffIdAndLeaveTypeAndYear(
                 app.getSchoolId(), app.getStaffId(), app.getLeaveType(), year)
-            .orElseGet(() -> {
-                // Auto-seed a default entitlement so first-time approvals don't fail.
-                // HR can always edit the row later via POST /leave-balances.
-                log.warn("No leave balance row for staff={} type={} year={}. Auto-seeding default entitlement.",
-                    app.getStaffId(), app.getLeaveType(), year);
-                LeaveBalance fresh = new LeaveBalance();
-                fresh.setSchoolId(app.getSchoolId());
-                fresh.setStaffId(app.getStaffId());
-                fresh.setLeaveType(app.getLeaveType());
-                fresh.setYear(year);
-                fresh.setEntitledDays(new BigDecimal("30"));
-                fresh.setConsumedDays(BigDecimal.ZERO);
-                return balanceRepository.save(fresh);
-            });
-        bal.setConsumedDays(bal.getConsumedDays().add(delta));
-        balanceRepository.save(bal);
+            .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND,
+                "No " + app.getLeaveType() + " leave balance configured for " + year
+                    + " — set the entitlement before approving."));
     }
 }
