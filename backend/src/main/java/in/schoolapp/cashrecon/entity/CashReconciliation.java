@@ -41,6 +41,13 @@ public class CashReconciliation {
     @Column(name = "variance_paise", nullable = false)
     private long variancePaise;
 
+    /** false while an over/short variance awaits checker sign-off (audit #9); true otherwise. */
+    @Column(name = "variance_reviewed", nullable = false)
+    private boolean varianceReviewed = true;
+
+    @Column(name = "reviewed_by_id")
+    private UUID reviewedById;
+
     @Column(columnDefinition = "TEXT")
     private String notes;
 

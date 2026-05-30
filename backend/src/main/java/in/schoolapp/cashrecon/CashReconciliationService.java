@@ -3,11 +3,14 @@ package in.schoolapp.cashrecon;
 import in.schoolapp.cashrecon.dto.CashReconciliationResponse;
 import in.schoolapp.cashrecon.dto.CloseDrawerRequest;
 import in.schoolapp.cashrecon.dto.DayTotalsResponse;
+import in.schoolapp.approval.ApprovalService;
+import in.schoolapp.approval.entity.ApprovalType;
 import in.schoolapp.cashrecon.entity.CashReconciliation;
 import in.schoolapp.common.TenantContext;
 import in.schoolapp.fee.repository.FeePaymentRepository;
 import in.schoolapp.fee.repository.FeePaymentRepository.ModeTotalRow;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,6 +31,12 @@ public class CashReconciliationService {
 
     private final CashReconciliationRepository repo;
     private final FeePaymentRepository paymentRepo;
+    private final ApprovalService approvalService;
+
+    /** Absolute variance (paise) above which a drawer close must be reviewed. Default 0 = any
+     *  non-zero over/short escalates; raise per tenant policy to cut noise. */
+    @Value("${app.cashrecon.variance-threshold-paise:0}")
+    private long varianceThresholdPaise;
 
     @Transactional(readOnly = true)
     public DayTotalsResponse expectedForDay(UUID tenantId, LocalDate date) {
@@ -67,7 +76,20 @@ public class CashReconciliationService {
         r.setCountedOtherPaise(req.countedOtherPaise());
         r.setVariancePaise(variance);
         r.setNotes(req.notes());
-        return CashReconciliationResponse.from(repo.save(r));
+
+        // Escalate an over/short above the threshold for checker sign-off (audit #9). The record is
+        // still saved (the count is a fact); it stays unreviewed until the approval is granted.
+        boolean escalate = Math.abs(variance) > varianceThresholdPaise;
+        r.setVarianceReviewed(!escalate);
+        r = repo.save(r);
+
+        if (escalate) {
+            String sign = variance < 0 ? "short" : "over";
+            approvalService.submit(tenantId, ApprovalType.CASH_VARIANCE, r.getId(), null,
+                Math.abs(variance),
+                "Cash drawer " + sign + " by ₹" + (Math.abs(variance) / 100) + " on " + req.date());
+        }
+        return CashReconciliationResponse.from(r);
     }
 
     @Transactional(readOnly = true)

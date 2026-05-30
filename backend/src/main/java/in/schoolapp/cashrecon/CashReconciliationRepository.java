@@ -9,6 +9,8 @@ import java.util.UUID;
 
 public interface CashReconciliationRepository extends JpaRepository<CashReconciliation, UUID> {
 
+    java.util.Optional<CashReconciliation> findByIdAndSchoolId(UUID id, UUID schoolId);
+
     List<CashReconciliation> findBySchoolIdOrderByClosedOnDateDesc(UUID schoolId);
 
     List<CashReconciliation> findBySchoolIdAndClosedOnDate(UUID schoolId, LocalDate date);

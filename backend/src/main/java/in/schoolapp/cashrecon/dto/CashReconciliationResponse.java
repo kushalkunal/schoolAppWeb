@@ -13,6 +13,7 @@ public record CashReconciliationResponse(
     long expectedCashPaise, long expectedUpiPaise, long expectedChequePaise, long expectedOtherPaise,
     long countedCashPaise,  long countedUpiPaise,  long countedChequePaise,  long countedOtherPaise,
     long variancePaise,
+    boolean varianceReviewed,
     String notes,
     OffsetDateTime closedAt
 ) {
@@ -21,6 +22,6 @@ public record CashReconciliationResponse(
             r.getId(), r.getClosedOnDate(), r.getClosedById(),
             r.getExpectedCashPaise(), r.getExpectedUpiPaise(), r.getExpectedChequePaise(), r.getExpectedOtherPaise(),
             r.getCountedCashPaise(),  r.getCountedUpiPaise(),  r.getCountedChequePaise(),  r.getCountedOtherPaise(),
-            r.getVariancePaise(), r.getNotes(), r.getClosedAt());
+            r.getVariancePaise(), r.isVarianceReviewed(), r.getNotes(), r.getClosedAt());
     }
 }

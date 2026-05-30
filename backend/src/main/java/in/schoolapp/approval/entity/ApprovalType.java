@@ -8,5 +8,6 @@ package in.schoolapp.approval.entity;
 public enum ApprovalType {
     FEE_DISCOUNT,
     FEE_REFUND,
-    EXPENSE
+    EXPENSE,
+    CASH_VARIANCE
 }
