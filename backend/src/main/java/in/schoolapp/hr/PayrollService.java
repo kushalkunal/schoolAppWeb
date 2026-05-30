@@ -29,9 +29,10 @@ import java.util.UUID;
  *
  * <ol>
  *   <li>Resolve the salary structure (staff override > role default).</li>
- *   <li>Compute working days from {@link StaffAttendanceRepository}; defaults to total
- *       calendar days if no attendance has been marked (so a freshly onboarded school can
- *       still generate payslips before configuring attendance).</li>
+ *   <li>Compute working days from <em>approved</em> {@link StaffAttendanceRepository} rows only;
+ *       defaults to total calendar days if no attendance has been marked (so a freshly onboarded
+ *       school can still generate payslips before configuring attendance).</li>
+ *   <li>Refuse to generate for an inactive (resigned/terminated) staff member.</li>
  *   <li>Subtract approved UNPAID leave days from working days.</li>
  *   <li>Run {@link PayrollCalculator}.</li>
  *   <li>Persist an immutable {@link Payslip} row with the full breakdown in JSONB.</li>
@@ -54,6 +55,13 @@ public class PayrollService {
             .filter(s -> s.getSchoolId().equals(tenantId))
             .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Staff not found"));
 
+        // Don't pay ex-staff (audit #11). A leaving employee's final settlement must be run while
+        // they are still active, before deactivation.
+        if (!staff.isActive()) {
+            throw new AppException(ErrorCode.VALIDATION_ERROR,
+                "Cannot generate a payslip for an inactive staff member.");
+        }
+
         SalaryStructure structure = structureRepository
             .findFirstBySchoolIdAndStaffIdAndActiveOrderByEffectiveFromDesc(tenantId, staffId, true)
             .orElseGet(() -> structureRepository
@@ -70,13 +78,18 @@ public class PayrollService {
         var rows = attendanceRepository.findStaffRange(tenantId, staffId, from, to);
         BigDecimal workingDays;
         if (rows.isEmpty()) {
+            // No attendance tracking in use yet — onboarding grace, pay the full month.
             workingDays = BigDecimal.valueOf(totalDays);
         } else {
-            double counted = rows.stream().mapToDouble(r -> switch (r.getStatus()) {
-                case PRESENT, LATE, LEAVE -> 1.0;   // LEAVE here = approved paid leave
-                case HALF_DAY -> 0.5;
-                case ABSENT, HOLIDAY -> 0.0;
-            }).sum();
+            // Only principal/admin-APPROVED attendance counts toward pay (audit #11) — payroll must
+            // never be computed off self-submitted, not-yet-reviewed days.
+            double counted = rows.stream()
+                .filter(in.schoolapp.hr.entity.StaffAttendance::isApproved)
+                .mapToDouble(r -> switch (r.getStatus()) {
+                    case PRESENT, LATE, LEAVE -> 1.0;   // LEAVE here = approved paid leave
+                    case HALF_DAY -> 0.5;
+                    case ABSENT, HOLIDAY -> 0.0;
+                }).sum();
             workingDays = BigDecimal.valueOf(counted);
         }
 
