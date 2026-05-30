@@ -135,6 +135,19 @@ public class FeeController {
         return ApiResponse.success(feeDashboardService.classWiseReport(tenantId, start, end));
     }
 
+    /** Daily/range collection register (audit #21): per-mode breakdown + totals. Defaults to today. */
+    @GetMapping("/fees/reports/collection-register")
+    public ApiResponse<in.schoolapp.fee.dto.CollectionRegisterResponse> collectionRegister(
+        @PathVariable UUID tenantId,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        LocalDate today = LocalDate.now();
+        LocalDate start = from != null ? from : today;
+        LocalDate end   = to   != null ? to   : today;
+        return ApiResponse.success(feeDashboardService.collectionRegister(tenantId, start, end));
+    }
+
     // ----- Manual reminders -----
 
     @PostMapping("/fees/reminders")

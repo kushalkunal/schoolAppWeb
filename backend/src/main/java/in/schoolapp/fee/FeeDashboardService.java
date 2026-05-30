@@ -1,6 +1,7 @@
 package in.schoolapp.fee;
 
 import in.schoolapp.fee.dto.ClassCollectionRow;
+import in.schoolapp.fee.dto.CollectionRegisterResponse;
 import in.schoolapp.fee.dto.DefaulterResponse;
 import in.schoolapp.fee.dto.FeeDashboardResponse;
 import in.schoolapp.fee.dto.RecentPaymentRow;
@@ -140,5 +141,18 @@ public class FeeDashboardService {
                 r.getStudentCount()
             ))
             .toList();
+    }
+
+    /** Collection register (audit #21): per-mode breakdown + grand total for a period. */
+    @Transactional(readOnly = true)
+    public CollectionRegisterResponse collectionRegister(UUID tenantId, LocalDate from, LocalDate to) {
+        List<CollectionRegisterResponse.ModeBreakdownRow> byMode =
+            paymentRepository.sumByModeBetween(tenantId, from, to).stream()
+                .map(r -> new CollectionRegisterResponse.ModeBreakdownRow(
+                    r.getMode(), r.getAmountPaise(), r.getPaymentCount()))
+                .toList();
+        long total = paymentRepository.sumCollectedBetween(tenantId, from, to);
+        long count = paymentRepository.countCollectedBetween(tenantId, from, to);
+        return new CollectionRegisterResponse(from, to, total, count, byMode);
     }
 }
