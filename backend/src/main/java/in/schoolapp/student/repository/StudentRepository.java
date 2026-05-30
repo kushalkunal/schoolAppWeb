@@ -16,6 +16,10 @@ public interface StudentRepository extends JpaRepository<Student, UUID> {
 
     Optional<Student> findByIdAndSchoolId(UUID id, UUID schoolId);
 
+    /** Tenant-ownership probe used by {@link in.schoolapp.student.StudentAccessGuard} to close
+     *  cross-tenant IDOR on by-student endpoints. */
+    boolean existsByIdAndSchoolId(UUID id, UUID schoolId);
+
     Page<Student> findBySchoolIdAndActiveTrue(UUID schoolId, Pageable pageable);
 
     boolean existsBySchoolIdAndAdmissionNumber(UUID schoolId, String admissionNumber);
@@ -34,7 +38,18 @@ public interface StudentRepository extends JpaRepository<Student, UUID> {
             OR admission_number ILIKE :q || '%'
           )
         ORDER BY first_name
-        """, nativeQuery = true)
+        LIMIT :#{#pageable.pageSize} OFFSET :#{#pageable.offset}
+        """,
+        countQuery = """
+        SELECT COUNT(*) FROM students
+        WHERE school_id = :schoolId
+          AND is_active = TRUE
+          AND (
+            (first_name || ' ' || COALESCE(last_name, '')) ILIKE '%' || :q || '%'
+            OR admission_number ILIKE :q || '%'
+          )
+        """,
+        nativeQuery = true)
     Page<Student> searchBySchoolId(@Param("schoolId") UUID schoolId,
                                    @Param("q") String query,
                                    Pageable pageable);

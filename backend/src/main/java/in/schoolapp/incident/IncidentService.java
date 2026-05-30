@@ -9,6 +9,7 @@ import in.schoolapp.feature.FeatureKey;
 import in.schoolapp.incident.dto.CreateIncidentRequest;
 import in.schoolapp.incident.dto.IncidentResponse;
 import in.schoolapp.incident.entity.Incident;
+import in.schoolapp.student.StudentAccessGuard;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -24,9 +25,11 @@ public class IncidentService {
 
     private final IncidentRepository repo;
     private final ParentNotificationService parentNotificationService;
+    private final StudentAccessGuard studentAccessGuard;
 
     @Transactional
     public IncidentResponse create(UUID tenantId, CreateIncidentRequest req) {
+        studentAccessGuard.assertInTenant(tenantId, req.studentId());
         Incident i = new Incident();
         i.setSchoolId(tenantId);
         i.setStudentId(req.studentId());
@@ -60,7 +63,8 @@ public class IncidentService {
     }
 
     @Transactional(readOnly = true)
-    public List<IncidentResponse> forStudent(UUID studentId) {
+    public List<IncidentResponse> forStudent(UUID tenantId, UUID studentId) {
+        studentAccessGuard.assertInTenant(tenantId, studentId);
         return repo.findByStudentIdOrderByOccurredOnDesc(studentId).stream()
             .map(IncidentResponse::from).toList();
     }

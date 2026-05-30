@@ -58,7 +58,7 @@ public class VaultController {
     public ApiResponse<List<VaultDocument>> list(
         @PathVariable UUID tenantId, @PathVariable UUID studentId
     ) {
-        return ApiResponse.success(service.listForStudent(studentId));
+        return ApiResponse.success(service.listForStudent(tenantId, studentId));
     }
 
     @DeleteMapping("/{id}")

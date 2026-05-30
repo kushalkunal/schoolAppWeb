@@ -4,6 +4,7 @@ import in.schoolapp.common.AppException;
 import in.schoolapp.common.ErrorCode;
 import in.schoolapp.common.TenantContext;
 import in.schoolapp.storage.FileStorageService;
+import in.schoolapp.student.StudentAccessGuard;
 import in.schoolapp.vault.entity.VaultDocument;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -18,10 +19,12 @@ public class VaultService {
 
     private final VaultDocumentRepository repo;
     private final FileStorageService storage;
+    private final StudentAccessGuard studentAccessGuard;
 
     @Transactional
     public VaultDocument upload(UUID tenantId, UUID studentId, String docType,
                                 String fileName, String mimeType, byte[] bytes, String notes) {
+        studentAccessGuard.assertInTenant(tenantId, studentId);
         var stored = storage.store(
             "tenants/" + tenantId + "/vault/" + studentId + "/" + System.currentTimeMillis() + "-" + fileName,
             bytes, mimeType);
@@ -39,7 +42,8 @@ public class VaultService {
     }
 
     @Transactional(readOnly = true)
-    public List<VaultDocument> listForStudent(UUID studentId) {
+    public List<VaultDocument> listForStudent(UUID tenantId, UUID studentId) {
+        studentAccessGuard.assertInTenant(tenantId, studentId);
         return repo.findByStudentIdOrderByUploadedAtDesc(studentId);
     }
 

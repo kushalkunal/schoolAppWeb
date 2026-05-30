@@ -50,7 +50,7 @@ public class IncidentController {
     public ApiResponse<List<IncidentResponse>> byStudent(
         @PathVariable UUID tenantId, @PathVariable UUID studentId
     ) {
-        return ApiResponse.success(service.forStudent(studentId));
+        return ApiResponse.success(service.forStudent(tenantId, studentId));
     }
 
     @DeleteMapping("/{id}")

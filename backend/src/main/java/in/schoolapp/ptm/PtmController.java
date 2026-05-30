@@ -34,12 +34,13 @@ public class PtmController {
         @RequestBody Map<String, Object> body
     ) {
         UUID teacherId = UUID.fromString((String) body.get("teacherId"));
+        UUID sectionId = body.get("sectionId") != null ? UUID.fromString((String) body.get("sectionId")) : null;
         LocalDate date = LocalDate.parse((String) body.get("date"));
         LocalTime start = LocalTime.parse((String) body.get("startTime"));
         LocalTime end = LocalTime.parse((String) body.get("endTime"));
         int capacity = body.get("capacity") == null ? 1 : ((Number) body.get("capacity")).intValue();
         return ResponseEntity.status(HttpStatus.CREATED).body(
-            ApiResponse.success(service.createSlot(tenantId, teacherId, date, start, end, capacity)));
+            ApiResponse.success(service.createSlot(tenantId, teacherId, sectionId, date, start, end, capacity)));
     }
 
     @GetMapping("/slots")
@@ -74,6 +75,6 @@ public class PtmController {
     public ApiResponse<List<PtmBooking>> byStudent(
         @PathVariable UUID tenantId, @PathVariable UUID studentId
     ) {
-        return ApiResponse.success(service.bookingsForStudent(studentId));
+        return ApiResponse.success(service.bookingsForStudent(tenantId, studentId));
     }
 }

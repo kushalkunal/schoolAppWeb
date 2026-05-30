@@ -5,6 +5,7 @@ import in.schoolapp.common.ApiResponse;
 import in.schoolapp.communication.parent.entity.ParentMessage;
 import in.schoolapp.feature.FeatureKey;
 import in.schoolapp.feature.RequiresFeature;
+import in.schoolapp.student.StudentAccessGuard;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -21,6 +22,7 @@ import java.util.UUID;
 public class ParentInboxController {
 
     private final ParentMessageRepository repo;
+    private final StudentAccessGuard studentAccessGuard;
 
     @GetMapping
     @PreAuthorize(AppRoles.OWNER_OR_ADMIN)
@@ -37,6 +39,7 @@ public class ParentInboxController {
     public ApiResponse<List<ParentMessage>> byStudent(
         @PathVariable UUID tenantId, @PathVariable UUID studentId
     ) {
+        studentAccessGuard.assertInTenant(tenantId, studentId);
         return ApiResponse.success(repo.findByStudentIdOrderBySentAtDesc(studentId));
     }
 }
