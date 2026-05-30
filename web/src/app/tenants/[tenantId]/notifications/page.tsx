@@ -26,12 +26,12 @@ import { useToast } from '@/components/ui/Toast';
 import { OWNER_OR_ADMIN, RequireRole } from '@/auth/RequireRole';
 import { formatDate } from '@/lib/utils';
 
-const STATUS_TONE: Record<NotificationStatus, 'success' | 'warning' | 'error' | 'neutral'> = {
+const STATUS_TONE: Record<NotificationStatus, 'success' | 'warning' | 'danger' | 'neutral'> = {
   READ:      'success',
   DELIVERED: 'success',
   SENT:      'warning',
   QUEUED:    'neutral',
-  FAILED:    'error',
+  FAILED:    'danger',
 };
 
 const EVENT_TYPE_LABELS: Record<string, string> = {
@@ -92,8 +92,8 @@ function LogsContent() {
     <div className="space-y-6">
       <PageHeader
         title="Notification Logs"
-        subtitle="Delivery history for every outbound WhatsApp message. Use Re-send if a parent reports they didn't receive it."
-        icon={Bell}
+        description="Delivery history for every outbound WhatsApp message. Use Re-send if a parent reports they didn't receive it."
+        icon={<Bell />}
       />
 
       {/* Filters */}

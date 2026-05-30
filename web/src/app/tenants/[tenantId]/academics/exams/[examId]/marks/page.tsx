@@ -166,7 +166,7 @@ function ComponentGrid({
   }
 
   function updateCell(key: CellKey, patch: Partial<CellState>) {
-    setCells(prev => ({ ...prev, [key]: { ...prev[key], ...patch } }));
+    setCells(prev => ({ ...prev, [key]: { obtained: '', absent: false, ...prev[key], ...patch } }));
     setDirty(true);
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(() => { if (canWrite) save(false); }, 800);
@@ -185,7 +185,7 @@ function ComponentGrid({
   const effectiveCanWrite = canWrite && (!isLocked || isPrincipal);
 
   const firstStudent = sheetQ.data.students[0];
-  if (!firstStudent.subjects.length) {
+  if (!firstStudent || !firstStudent.subjects.length) {
     return (
       <Card>
         <p className="text-center text-slate-500 py-8">

@@ -130,9 +130,10 @@ function ResultStatusBadge({ status }: { status: ResultStatus | string }) {
   const map: Record<string, { label: string; cls: string }> = {
     DRAFT:     { label: 'Draft',     cls: 'bg-slate-100 text-slate-500' },
     READY:     { label: 'Ready',     cls: 'bg-blue-50 text-blue-600' },
+    VERIFIED:  { label: 'Verified',  cls: 'bg-indigo-50 text-indigo-600' },
     PUBLISHED: { label: 'Published', cls: 'bg-green-50 text-green-700' },
   };
-  const s = map[status] ?? map.DRAFT;
+  const s = map[status] ?? { label: String(status), cls: 'bg-slate-100 text-slate-500' };
   return <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${s.cls}`}>{s.label}</span>;
 }
 

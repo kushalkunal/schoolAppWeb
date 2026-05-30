@@ -113,7 +113,11 @@ export default function AdmitCardsPage() {
         </div>
       </div>
 
-      {actionError && <ErrorBanner message={actionError} />}
+      {actionError && (
+        <div role="alert" className="bg-red-50 border border-red-200 text-red-700 rounded px-4 py-3 text-sm">
+          {actionError}
+        </div>
+      )}
 
       {/* Stats */}
       {stats ? (
@@ -143,9 +147,8 @@ export default function AdmitCardsPage() {
               onClick={() => bulkGenerateMut.mutate()}
               loading={bulkGenerateMut.isPending}
               className="w-full sm:w-auto"
-              icon={<Zap className="w-4 h-4" />}
             >
-              Generate All
+              <Zap className="w-4 h-4" /> Generate All
             </Button>
           </div>
           {stats && stats.blocked > 0 && (
@@ -184,7 +187,7 @@ export default function AdmitCardsPage() {
       {cardsQ.isLoading ? (
         <div className="flex justify-center py-8"><Spinner /></div>
       ) : cardsQ.error ? (
-        <ErrorBanner message="Failed to load admit cards." />
+        <ErrorBanner error={cardsQ.error} />
       ) : cards.length === 0 ? (
         <EmptyState statusFilter={statusFilter} />
       ) : (

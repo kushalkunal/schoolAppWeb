@@ -103,8 +103,8 @@ function TemplatesContent() {
     <div className="space-y-6">
       <PageHeader
         title="Message Templates"
-        subtitle="Customise the WhatsApp messages your school sends to parents. Placeholders in {curly braces} are replaced automatically."
-        icon={MessageSquare}
+        description="Customise the WhatsApp messages your school sends to parents. Placeholders in {curly braces} are replaced automatically."
+        icon={<MessageSquare />}
       />
 
       <div className="space-y-4 max-w-3xl">

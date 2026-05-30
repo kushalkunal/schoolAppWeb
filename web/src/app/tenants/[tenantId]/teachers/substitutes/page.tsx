@@ -203,7 +203,7 @@ export default function SubstitutesPage() {
                     <RequireRole roles={OWNER_OR_ADMIN}>
                       <Button
                         size="sm"
-                        tone="ghost"
+                        variant="ghost"
                         onClick={() => cancel.mutate(s.id)}
                         disabled={cancel.isPending}
                         title="Cancel substitute assignment"
@@ -298,7 +298,7 @@ export default function SubstitutesPage() {
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button tone="ghost" onClick={() => { setAssignOpen(false); setFormError(''); }}>
+            <Button variant="ghost" onClick={() => { setAssignOpen(false); setFormError(''); }}>
               Cancel
             </Button>
             <Button onClick={handleAssign} disabled={assign.isPending}>

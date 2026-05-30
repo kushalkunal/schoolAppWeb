@@ -21,6 +21,8 @@ interface ToastApi {
   error:   (message: string, title?: string) => void;
   info:    (message: string, title?: string) => void;
   warning: (message: string, title?: string) => void;
+  /** Convenience: showToast(message, tone) — used by pages that prefer a single call. */
+  showToast: (message: string, tone?: ToastTone) => void;
 }
 
 const Ctx = createContext<ToastApi | null>(null);
@@ -53,6 +55,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     error:   (message, title) => push({ tone: 'error',   title, message }),
     info:    (message, title) => push({ tone: 'info',    title, message }),
     warning: (message, title) => push({ tone: 'warning', title, message }),
+    showToast: (message, tone = 'info') => push({ tone, message }),
   };
 
   return (
@@ -71,7 +74,7 @@ export function useToast(): ToastApi {
   if (!ctx) {
     // Soft fallback so tests + storybook-style isolated renders don't crash.
     const noop = () => {};
-    return { toast: noop, success: noop, error: noop, info: noop, warning: noop };
+    return { toast: noop, success: noop, error: noop, info: noop, warning: noop, showToast: noop };
   }
   return ctx;
 }

@@ -31,14 +31,16 @@ const STATUS_META: Record<StaffAttendanceStatus, {
   label: string;
   short: string;
   tone: 'success' | 'warning' | 'info' | 'danger' | 'neutral';
+  bg: string;
+  text: string;
   icon: React.ElementType;
 }> = {
-  PRESENT:  { label: 'Present',  short: 'P',  tone: 'success', icon: Check },
-  LATE:     { label: 'Late',     short: 'L',  tone: 'warning', icon: Clock },
-  HALF_DAY: { label: 'Half day', short: 'H',  tone: 'info',    icon: AlertCircle },
-  ABSENT:   { label: 'Absent',   short: 'A',  tone: 'danger',  icon: X },
-  LEAVE:    { label: 'On leave', short: 'Lv', tone: 'neutral', icon: Plane },
-  HOLIDAY:  { label: 'Holiday',  short: 'Ho', tone: 'neutral', icon: Sun },
+  PRESENT:  { label: 'Present',  short: 'P',  tone: 'success', bg: 'bg-success/10', text: 'text-success', icon: Check },
+  LATE:     { label: 'Late',     short: 'L',  tone: 'warning', bg: 'bg-warning/10', text: 'text-warning', icon: Clock },
+  HALF_DAY: { label: 'Half day', short: 'H',  tone: 'info',    bg: 'bg-info/10',    text: 'text-info',    icon: AlertCircle },
+  ABSENT:   { label: 'Absent',   short: 'A',  tone: 'danger',  bg: 'bg-danger/10',  text: 'text-danger',  icon: X },
+  LEAVE:    { label: 'On leave', short: 'Lv', tone: 'neutral', bg: 'bg-slate-100',  text: 'text-slate-600', icon: Plane },
+  HOLIDAY:  { label: 'Holiday',  short: 'Ho', tone: 'neutral', bg: 'bg-slate-100',  text: 'text-slate-600', icon: Sun },
 };
 
 const todayIso = () => new Date().toISOString().slice(0, 10);

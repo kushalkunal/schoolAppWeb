@@ -778,9 +778,14 @@ export interface StaffAttendanceRequest {
 export interface StaffAttendanceResponse {
   id: string | null;
   staffId: string;
+  staffName: string | null;
   date: string;
   status: StaffAttendanceStatus;
   notes: string | null;
+  approved: boolean;
+  approvedById: string | null;
+  approvedByName: string | null;
+  approvedAt: string | null;
 }
 
 export interface StaffMonthlySummaryResponse {

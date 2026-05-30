@@ -1,5 +1,4 @@
 import { apiClient, apiGet, apiPost, apiPut, apiDelete } from '@/api/client';
-import type { ApiResponse } from '@/types/api';
 
 export interface FeeReminderSchedule {
   id: string;

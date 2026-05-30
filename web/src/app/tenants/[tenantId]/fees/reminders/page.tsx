@@ -113,8 +113,8 @@ function RemindersContent() {
     <div className="space-y-6">
       <PageHeader
         title="Fee Reminder Schedules"
-        subtitle="Automatic WhatsApp reminders are sent to parents based on these rules. The system checks daily at 09:30."
-        icon={Bell}
+        description="Automatic WhatsApp reminders are sent to parents based on these rules. The system checks daily at 09:30."
+        icon={<Bell />}
         actions={canEdit ? <Button size="sm" onClick={openNew}><Plus size={14} className="mr-1" />New Rule</Button> : undefined}
       />
 
