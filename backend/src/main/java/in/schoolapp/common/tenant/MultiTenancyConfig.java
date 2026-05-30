@@ -10,13 +10,13 @@ import javax.sql.DataSource;
 
 /**
  * Activates Hibernate multi-tenancy so every session is bound to the caller's tenant at the JDBC
- * connection layer (see {@link RlsTenantConnectionProvider}) and the V24 row-level-security
+ * connection layer (see {@link RlsTenantConnectionProvider}) and the V37 row-level-security
  * policies enforce isolation. Registering a tenant resolver + connection provider is all Hibernate
  * 6 needs to switch multi-tenancy on.
  * <p>
  * Kill switch: set {@code app.multitenancy.rls-enabled=false} to skip wiring entirely. With the
  * provider unwired the app connects as its normal (superuser-capable) role, which bypasses RLS —
- * i.e. the app behaves exactly as before this change. The V24 migration is inert on its own, so
+ * i.e. the app behaves exactly as before this change. The V37 migration is inert on its own, so
  * this toggle is a safe, instant rollback if connection-level binding ever misbehaves at startup.
  */
 @Configuration

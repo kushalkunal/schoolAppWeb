@@ -9,7 +9,7 @@ import java.util.UUID;
  * Tells Hibernate which tenant the current session belongs to, read from {@link TenantContext}
  * (populated per-request by {@code JwtAuthFilter}). The value is handed to
  * {@link RlsTenantConnectionProvider}, which binds it onto the JDBC connection as the
- * {@code app.current_tenant} GUC that the V24 row-level-security policies key on.
+ * {@code app.current_tenant} GUC that the V37 row-level-security policies key on.
  * <p>
  * When there is no tenant on the thread — login/OTP/signup, webhooks (tenant resolved from the
  * payload), platform admin, and the cross-tenant schedulers — we resolve to {@link #SYSTEM}.

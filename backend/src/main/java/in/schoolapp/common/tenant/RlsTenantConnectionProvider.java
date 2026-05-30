@@ -10,7 +10,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 
 /**
- * Binds the current tenant onto every JDBC connection Hibernate hands out, so the V24
+ * Binds the current tenant onto every JDBC connection Hibernate hands out, so the V37
  * row-level-security policies enforce isolation regardless of what the query says. This is the
  * connection-layer form of "automatic tenant scoping" — and unlike Hibernate {@code @TenantId} it
  * also covers native queries and does not break the cross-tenant schedulers (they resolve to
@@ -19,7 +19,7 @@ import java.sql.Statement;
  * On borrow:
  * <ol>
  *   <li>{@code SET ROLE school_app} — RLS does not apply to superusers, so the session must act as
- *       this non-superuser role (created in V24) for policies to bind. Re-applied on every borrow
+ *       this non-superuser role (created in V37) for policies to bind. Re-applied on every borrow
  *       so a recycled pool connection can never carry another request's role/tenant.</li>
  *   <li>For a real tenant: {@code set_config('app.current_tenant', <uuid>, false)} — the GUC the
  *       policies compare {@code school_id} against. For {@code SYSTEM} the GUC is left unset, which

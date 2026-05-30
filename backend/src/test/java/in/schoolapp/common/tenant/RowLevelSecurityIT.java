@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Proves the V24 row-level-security migration enforces tenant isolation against a real PostgreSQL,
+ * Proves the V37 row-level-security migration enforces tenant isolation against a real PostgreSQL,
  * independent of any application query. This is the database-layer backstop for the cross-tenant
  * IDOR (audit #1): even a query that forgets {@code AND school_id = ?} — or that targets another
  * tenant's primary key directly — returns nothing once the session is bound to a tenant.
