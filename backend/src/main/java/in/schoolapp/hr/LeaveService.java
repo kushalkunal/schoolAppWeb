@@ -14,6 +14,9 @@ import in.schoolapp.hr.entity.LeaveApplication.LeaveStatus;
 import in.schoolapp.hr.entity.LeaveBalance;
 import in.schoolapp.hr.repository.LeaveApplicationRepository;
 import in.schoolapp.hr.repository.LeaveBalanceRepository;
+import in.schoolapp.school.entity.Staff;
+import in.schoolapp.school.entity.StaffRole;
+import in.schoolapp.school.repository.StaffRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -46,6 +49,7 @@ public class LeaveService {
 
     private final LeaveApplicationRepository applicationRepository;
     private final LeaveBalanceRepository balanceRepository;
+    private final StaffRepository staffRepository;
     private final AuditLogger audit;
 
     @Transactional
@@ -109,6 +113,8 @@ public class LeaveService {
                 throw new AppException(ErrorCode.APPROVAL_SELF_NOT_ALLOWED,
                     "You cannot approve your own leave application.");
             }
+            // Approval hierarchy (audit #6): approver must outrank the applicant.
+            requireSufficientApproverRank(tenantId, app.getStaffId());
             consume(app);   // balance-gated; throws if no entitlement or insufficient days
             app.setStatus(LeaveStatus.APPROVED);
         } else {
@@ -213,5 +219,52 @@ public class LeaveService {
             .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND,
                 "No " + app.getLeaveType() + " leave balance configured for " + year
                     + " — set the entitlement before approving."));
+    }
+
+    /**
+     * Enforces the leave approval hierarchy (audit #6): the approver's role must be senior enough
+     * for the applicant's role —
+     * teacher/accountant/librarian → ADMIN+, ADMIN → PRINCIPAL+, PRINCIPAL/OWNER → OWNER.
+     */
+    private void requireSufficientApproverRank(UUID tenantId, UUID applicantStaffId) {
+        Staff applicant = staffRepository.findByIdAndSchoolId(applicantStaffId, tenantId)
+            .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Applicant staff not found"));
+        int required = requiredApproverRank(applicant.getRole());
+        int approver = rank(parseRole(TenantContext.getRole()));
+        if (approver < required) {
+            throw new AppException(ErrorCode.LEAVE_APPROVER_TOO_JUNIOR,
+                "Your role cannot approve leave for a " + applicant.getRole()
+                    + " — it requires a more senior approver.");
+        }
+    }
+
+    /** Authority rank of a role (higher = more senior). */
+    private static int rank(StaffRole role) {
+        if (role == null) return 0;
+        return switch (role) {
+            case SUPER_ADMIN, SCHOOL_OWNER -> 5;
+            case PRINCIPAL -> 4;
+            case ADMIN -> 3;
+            default -> 1;   // class/subject teacher, accountant, librarian, viewer
+        };
+    }
+
+    /** Minimum approver rank required to approve a given applicant's leave. */
+    private static int requiredApproverRank(StaffRole applicantRole) {
+        if (applicantRole == null) return 5;
+        return switch (applicantRole) {
+            case SUPER_ADMIN, SCHOOL_OWNER, PRINCIPAL -> 5;   // only the owner approves
+            case ADMIN -> 4;                                   // principal or above
+            default -> 3;                                      // teachers/accountant/librarian → admin+
+        };
+    }
+
+    private static StaffRole parseRole(String role) {
+        if (role == null) return null;
+        try {
+            return StaffRole.valueOf(role);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 }

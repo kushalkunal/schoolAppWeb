@@ -53,6 +53,8 @@ public enum ErrorCode {
     ATTENDANCE_RECORD_NOT_FOUND(HttpStatus.NOT_FOUND),
     LEAVE_OVERLAP(HttpStatus.CONFLICT),
     LEAVE_BALANCE_INSUFFICIENT(HttpStatus.CONFLICT),
+    // Approver's role is not senior enough to approve this applicant's leave (#6 hierarchy).
+    LEAVE_APPROVER_TOO_JUNIOR(HttpStatus.FORBIDDEN),
 
     // ---------- Fee ----------
     INVOICE_NOT_FOUND(HttpStatus.NOT_FOUND),

@@ -11,6 +11,9 @@ import in.schoolapp.hr.entity.LeaveApplication.LeaveType;
 import in.schoolapp.hr.entity.LeaveBalance;
 import in.schoolapp.hr.repository.LeaveApplicationRepository;
 import in.schoolapp.hr.repository.LeaveBalanceRepository;
+import in.schoolapp.school.entity.Staff;
+import in.schoolapp.school.entity.StaffRole;
+import in.schoolapp.school.repository.StaffRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -40,6 +43,7 @@ class LeaveServiceTest {
 
     @Mock LeaveApplicationRepository applicationRepository;
     @Mock LeaveBalanceRepository balanceRepository;
+    @Mock StaffRepository staffRepository;
     @Mock AuditLogger audit;
     LeaveService service;
 
@@ -50,11 +54,14 @@ class LeaveServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new LeaveService(applicationRepository, balanceRepository, audit);
+        service = new LeaveService(applicationRepository, balanceRepository, staffRepository, audit);
         lenient().when(applicationRepository.save(any(LeaveApplication.class))).thenAnswer(i -> i.getArgument(0));
         lenient().when(balanceRepository.save(any(LeaveBalance.class))).thenAnswer(i -> i.getArgument(0));
         lenient().when(applicationRepository.findByIdAndSchoolId(appId, tenant))
             .thenReturn(Optional.of(submittedApplication()));
+        // Applicant defaults to a CLASS_TEACHER, which a PRINCIPAL approver outranks.
+        lenient().when(staffRepository.findByIdAndSchoolId(applicant, tenant))
+            .thenReturn(Optional.of(staffWithRole(StaffRole.CLASS_TEACHER)));
     }
 
     @AfterEach
@@ -108,6 +115,27 @@ class LeaveServiceTest {
         verify(audit).logAction(org.mockito.ArgumentMatchers.eq(tenant),
             org.mockito.ArgumentMatchers.eq("LeaveApplication"), any(),
             org.mockito.ArgumentMatchers.eq("LEAVE_APPROVED"), any());
+    }
+
+    @Test
+    void adminCannotApproveAPrincipalsLeave() {
+        // Hierarchy (audit #6): a PRINCIPAL's leave needs the SCHOOL_OWNER; an ADMIN is too junior.
+        when(staffRepository.findByIdAndSchoolId(applicant, tenant))
+            .thenReturn(Optional.of(staffWithRole(StaffRole.PRINCIPAL)));
+        TenantContext.set(tenant, approver, "ADMIN");
+
+        assertThatThrownBy(() -> service.decide(tenant, appId, new LeaveDecisionRequest(true, null)))
+            .isInstanceOf(AppException.class)
+            .extracting("errorCode").isEqualTo(ErrorCode.LEAVE_APPROVER_TOO_JUNIOR);
+
+        verify(balanceRepository, never()).save(any());
+    }
+
+    private Staff staffWithRole(StaffRole role) {
+        Staff s = new Staff();
+        s.setSchoolId(tenant);
+        s.setRole(role);
+        return s;
     }
 
     private LeaveApplication submittedApplication() {
