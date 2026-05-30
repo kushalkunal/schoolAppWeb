@@ -22,4 +22,13 @@ export default defineConfig({
     },
   ],
 
+  // Auto-starts the Next.js dev server on :3001 for the frontend-only (API-mocked) specs.
+  // The legacy live specs additionally expect a backend on :8081 + seed data.
+  webServer: {
+    // Serves the production build (precompiled, fast to become ready). Run `npm run build` first.
+    command: 'npx next start -p 3001',
+    url: 'http://localhost:3001',
+    reuseExistingServer: !process.env.CI,
+    timeout: 180_000,
+  },
 });
