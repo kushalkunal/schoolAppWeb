@@ -12,6 +12,9 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { Drawer } from 'vaul';
 import { RequireTenantMatch } from '@/auth/RequireTenantMatch';
+import { RequireRouteAccess } from '@/auth/RequireRouteAccess';
+import { canAccessHref } from '@/auth/routeAccess';
+import type { StaffRole } from '@/auth/jwt';
 import { useAuth } from '@/auth/AuthProvider';
 import { BrandLogo } from '@/brand/BrandLogo';
 import { useBranding, BrandingProvider } from '@/brand/BrandingProvider';
@@ -122,7 +125,10 @@ function AppShell({ children }: { children: React.ReactNode }) {
   ];
 
   const nav: NavItem[] = (isTeacherRole ? teacherNav : isAccountant ? accountantNav : isLibrarian ? librarianNav : adminNav)
-    .filter((n) => !n.flag || isFeatureEnabled(n.flag));
+    .filter((n) => !n.flag || isFeatureEnabled(n.flag))
+    // Never show a link the role can't actually open. Also closes the gap where VIEWER /
+    // SUPER_ADMIN fell through to the full admin nav — they now see only their permitted areas.
+    .filter((n) => role === '' || canAccessHref(role as StaffRole, n.href, tenantId));
 
   // Mobile bottom nav: first 4 tabs + "More" drawer for the rest
   const primaryMobileNav = nav.slice(0, 4);
@@ -312,7 +318,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
           transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
           className="flex-1 p-4 sm:p-6"
         >
-          {children}
+          <RequireRouteAccess tenantId={tenantId}>{children}</RequireRouteAccess>
         </motion.main>
       </div>
 
