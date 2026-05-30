@@ -17,5 +17,7 @@ public record IssueTransferCertificateRequest(
     boolean promoted,
     @Size(max = 100) String feesDue,
     @Size(max = 500) String remarks,
-    @Size(max = 40)  String tcNumber
+    @Size(max = 40)  String tcNumber,
+    /** Proceed despite outstanding dues (audited). The actual amount is always computed and shown. */
+    boolean overrideDues
 ) {}

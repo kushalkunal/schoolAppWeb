@@ -6,6 +6,9 @@ import in.schoolapp.academics.dto.ExamResponse;
 import in.schoolapp.academics.dto.ReportCardResponse;
 import in.schoolapp.auth.AppRoles;
 import in.schoolapp.common.ApiResponse;
+import in.schoolapp.common.AppException;
+import in.schoolapp.common.ErrorCode;
+import in.schoolapp.fee.repository.FeeInvoiceRepository;
 import in.schoolapp.documents.dto.HallTicketRequest;
 import in.schoolapp.documents.dto.IssueBonafideRequest;
 import in.schoolapp.documents.dto.IssueTransferCertificateRequest;
@@ -63,6 +66,7 @@ public class DocumentController {
     private final FamilyService familyService;
     private final ExamService examService;
     private final ReportCardService reportCardService;
+    private final FeeInvoiceRepository feeInvoiceRepository;
 
     // ---------------- Transfer Certificate ----------------
     //
@@ -80,6 +84,15 @@ public class DocumentController {
         SchoolResponse school = schoolService.getSchool(tenantId);
         StudentProfileResponse profile = familyService.getProfile(tenantId, studentId);
 
+        // Fee-clearance gate (audit #13): never issue a TC to a defaulter unless explicitly
+        // overridden, and show the real computed dues — not the caller's free-text claim.
+        long outstanding = feeInvoiceRepository.sumOutstandingByStudent(studentId);
+        if (outstanding > 0 && !req.overrideDues()) {
+            throw new AppException(ErrorCode.FEE_CLEARANCE_REQUIRED,
+                "Cannot issue a transfer certificate: student has outstanding dues of ₹"
+                    + (outstanding / 100) + ". Clear the dues or issue with an override.");
+        }
+
         Map<String, Object> model = new LinkedHashMap<>();
         model.put("school", school);
         model.put("student", profile.student());
@@ -93,7 +106,7 @@ public class DocumentController {
         model.put("reasonForLeaving", req.reasonForLeaving());
         model.put("conduct", req.conduct());
         model.put("promoted", req.promoted());
-        model.put("feesDue", req.feesDue() != null ? req.feesDue() : "None");
+        model.put("feesDue", outstanding > 0 ? "₹" + (outstanding / 100) : "None");
         model.put("remarks", req.remarks());
         model.put("tcNumber", req.tcNumber() != null ? req.tcNumber() : autoTcNumber(tenantId));
         model.put("issueDate", LocalDate.now());

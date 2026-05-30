@@ -55,6 +55,8 @@ public enum ErrorCode {
     INVOICE_NOT_FOUND(HttpStatus.NOT_FOUND),
     PAYMENT_AMOUNT_EXCEEDS_DUE(HttpStatus.BAD_REQUEST),
     RECEIPT_NOT_FOUND(HttpStatus.NOT_FOUND),
+    // Student cannot be withdrawn / issued a TC while fees are outstanding, unless overridden (#13).
+    FEE_CLEARANCE_REQUIRED(HttpStatus.CONFLICT),
 
     // ---------- Academics ----------
     EXAM_NOT_FOUND(HttpStatus.NOT_FOUND),
