@@ -8,8 +8,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.data.domain.Pageable;
 
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -18,7 +18,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doThrow;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -26,6 +26,7 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class OutboxPollerTest {
 
+    @Mock OutboxClaimer claimer;
     @Mock OutboxEventRepository repository;
     @Mock ApplicationEventPublisher events;
 
@@ -35,12 +36,12 @@ class OutboxPollerTest {
     void setUp() {
         ObjectMapper om = new ObjectMapper();
         om.registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
-        poller = new OutboxPoller(repository, events, om);
+        poller = new OutboxPoller(claimer, repository, events, om);
     }
 
     @Test
     void drain_emptyBatch_isANoOp() {
-        when(repository.findDue(any(OffsetDateTime.class), any(Pageable.class))).thenReturn(List.of());
+        when(claimer.claim(anyInt(), any(Duration.class))).thenReturn(List.of());
         poller.drain();
         verify(events, never()).publishEvent(any());
     }
@@ -93,7 +94,7 @@ class OutboxPollerTest {
         // per-row in its own transaction, so failure on one doesn't stop the other.
         OutboxEvent good = newRow(SampleEvent.class.getName(), Map.of("text", "ok"));
         OutboxEvent bad = newRow("nope.NotARealClass", Map.of("x", 1));
-        when(repository.findDue(any(OffsetDateTime.class), any(Pageable.class)))
+        when(claimer.claim(anyInt(), any(Duration.class)))
             .thenReturn(List.of(good, bad));
         when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 

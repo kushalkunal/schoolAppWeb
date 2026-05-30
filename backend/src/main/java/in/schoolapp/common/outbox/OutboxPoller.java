@@ -4,12 +4,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -24,10 +24,9 @@ import java.util.List;
  * {@code next_attempt_at} forward with exponential backoff capped at 10 minutes. After
  * 10 attempts the row stays in the table for manual review — no automatic poisoning.
  *
- * <p>Single-instance assumption: the polling query has no {@code FOR UPDATE SKIP LOCKED},
- * so running multiple JVMs concurrently would let two pollers pick up the same row. For
- * the current single-node deployment this is fine; multi-instance deployments should add
- * row-level locking or a dedicated leader-election strategy.
+ * <p>Multi-instance safe (audit #5): the batch is claimed via {@link OutboxClaimer} using
+ * {@code FOR UPDATE SKIP LOCKED} plus a visibility window, so concurrent pollers on other JVMs
+ * claim disjoint rows instead of double-publishing the same event.
  */
 @Slf4j
 @Component
@@ -40,14 +39,17 @@ public class OutboxPoller {
     private static final int MAX_BACKOFF_SECONDS = 600;
     /** After this many failed attempts the row stays in the table for manual review. */
     private static final int GIVE_UP_AFTER = 10;
+    /** How long a claimed-but-not-yet-processed row stays hidden from other pollers. */
+    private static final Duration CLAIM_VISIBILITY = Duration.ofSeconds(60);
 
+    private final OutboxClaimer claimer;
     private final OutboxEventRepository repository;
     private final ApplicationEventPublisher events;
     private final ObjectMapper objectMapper;
 
     @Scheduled(fixedDelay = 5_000)
     public void drain() {
-        List<OutboxEvent> due = repository.findDue(OffsetDateTime.now(), PageRequest.of(0, BATCH));
+        List<OutboxEvent> due = claimer.claim(BATCH, CLAIM_VISIBILITY);
         if (due.isEmpty()) return;
 
         int processed = 0;
