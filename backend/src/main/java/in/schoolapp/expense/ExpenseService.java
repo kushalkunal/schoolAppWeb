@@ -1,5 +1,8 @@
 package in.schoolapp.expense;
 
+import in.schoolapp.approval.ApprovalService;
+import in.schoolapp.approval.dto.ApprovalRequestResponse;
+import in.schoolapp.approval.entity.ApprovalType;
 import in.schoolapp.common.AppException;
 import in.schoolapp.common.ErrorCode;
 import in.schoolapp.common.TenantContext;
@@ -24,6 +27,7 @@ public class ExpenseService {
 
     private final ExpenseRepository expenseRepo;
     private final ExpenseCategoryRepository categoryRepo;
+    private final ApprovalService approvalService;
 
     // ---- Categories ----
 
@@ -44,8 +48,13 @@ public class ExpenseService {
 
     // ---- Expenses ----
 
+    /**
+     * Stages an expense for maker-checker approval (audit #8). The {@link Expense} is saved
+     * {@code approved=false} so it is excluded from totals until a different user approves the
+     * returned request; {@link ExpenseApprovalHandler} then marks it approved.
+     */
     @Transactional
-    public ExpenseResponse create(UUID tenantId, CreateExpenseRequest req) {
+    public ApprovalRequestResponse create(UUID tenantId, CreateExpenseRequest req) {
         Expense e = new Expense();
         e.setSchoolId(tenantId);
         e.setCategoryId(req.categoryId());
@@ -56,7 +65,15 @@ public class ExpenseService {
         e.setReceiptUrl(req.receiptUrl());
         e.setPaymentMode(req.paymentMode());
         e.setRecordedById(TenantContext.getStaffId());
-        return ExpenseResponse.from(expenseRepo.save(e));
+        e.setApproved(false);
+        e = expenseRepo.save(e);
+
+        String summary = "Expense ₹" + (req.amountPaise() / 100)
+            + (req.vendor() != null ? " to " + req.vendor() : "")
+            + " on " + req.spentOn();
+        var approval = approvalService.submit(
+            tenantId, ApprovalType.EXPENSE, e.getId(), null, req.amountPaise(), summary);
+        return ApprovalRequestResponse.from(approval);
     }
 
     @Transactional

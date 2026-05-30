@@ -21,6 +21,7 @@ public interface ExpenseRepository extends JpaRepository<Expense, UUID> {
         SELECT COALESCE(SUM(amount_paise), 0)
         FROM expenses
         WHERE school_id = :schoolId
+          AND approved = TRUE
           AND spent_on BETWEEN :from AND :to
         """, nativeQuery = true)
     long sumBetween(@Param("schoolId") UUID schoolId,

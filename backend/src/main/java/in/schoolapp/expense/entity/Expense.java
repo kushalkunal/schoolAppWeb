@@ -24,5 +24,9 @@ public class Expense {
     @Column(name = "receipt_url", columnDefinition = "TEXT") private String receiptUrl;
     @Column(name = "payment_mode", length = 20) private String paymentMode;
     @Column(name = "recorded_by_id") private UUID recordedById;
+    /** false until a checker approves via the maker-checker engine; unapproved expenses are
+     *  excluded from totals (audit #8). */
+    @Column(nullable = false) private boolean approved = false;
+    @Column(name = "approved_by_id") private UUID approvedById;
     @Column(name = "created_at", nullable = false) private OffsetDateTime createdAt = OffsetDateTime.now();
 }

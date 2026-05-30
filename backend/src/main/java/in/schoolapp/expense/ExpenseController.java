@@ -1,5 +1,6 @@
 package in.schoolapp.expense;
 
+import in.schoolapp.approval.dto.ApprovalRequestResponse;
 import in.schoolapp.auth.AppRoles;
 import in.schoolapp.common.ApiResponse;
 import in.schoolapp.expense.dto.CategoryDto;
@@ -47,10 +48,11 @@ public class ExpenseController {
 
     @PostMapping
     @PreAuthorize(AppRoles.FEE_WRITER)
-    public ResponseEntity<ApiResponse<ExpenseResponse>> create(
+    public ResponseEntity<ApiResponse<ApprovalRequestResponse>> create(
         @PathVariable UUID tenantId,
         @Valid @RequestBody CreateExpenseRequest req
     ) {
+        // Returns a PENDING approval; the expense is excluded from totals until approved.
         return ResponseEntity.status(HttpStatus.CREATED)
             .body(ApiResponse.success(service.create(tenantId, req)));
     }
