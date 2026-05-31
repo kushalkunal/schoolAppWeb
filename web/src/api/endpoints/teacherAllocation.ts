@@ -63,9 +63,30 @@ export interface AllocationOverview {
   now: NowTeaching;
 }
 
+export interface PeriodInfo { name: string; startTime: string | null; endTime: string | null; }
+export interface OngoingClass {
+  teacherId: string; teacherName: string; sectionLabel: string; subjectName: string; periodName: string;
+}
+export interface FreeTeacher { staffId: string; name: string; role: string; }
+export interface UpcomingClass { teacherName: string; sectionLabel: string; subjectName: string; time: string; }
+export interface LeaveEntry { staffId: string; name: string; leaveType: string; }
+export interface LiveMonitor {
+  currentPeriod: PeriodInfo | null;
+  nextPeriod: PeriodInfo | null;
+  teachingNow: OngoingClass[];
+  freeNow: FreeTeacher[];
+  upcoming: UpcomingClass[];
+  onLeave: LeaveEntry[];
+  counts: { totalTeachers: number; teachingNow: number; freeNow: number; onLeave: number };
+}
+
 export const teacherAllocationApi = {
   /** Single centralized overview for the Allocation Command Center (admin only). */
   overview(tenantId: string): Promise<AllocationOverview> {
     return apiGet(`/api/v1/tenants/${tenantId}/teacher-allocation/overview`);
+  },
+  /** Real-time teaching snapshot for the Live Teaching Monitor (admin only). */
+  liveMonitor(tenantId: string): Promise<LiveMonitor> {
+    return apiGet(`/api/v1/tenants/${tenantId}/teacher-allocation/live-monitor`);
   },
 };

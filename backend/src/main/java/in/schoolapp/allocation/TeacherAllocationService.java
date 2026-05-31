@@ -4,8 +4,10 @@ import in.schoolapp.academics.entity.Subject;
 import in.schoolapp.academics.entity.TeacherSubjectAssignment;
 import in.schoolapp.academics.repository.SubjectRepository;
 import in.schoolapp.academics.repository.TeacherSubjectAssignmentRepository;
+import in.schoolapp.allocation.dto.LiveMonitorResponse;
 import in.schoolapp.allocation.dto.TeacherAllocationOverviewResponse;
 import in.schoolapp.allocation.dto.TeacherAllocationOverviewResponse.*;
+import in.schoolapp.hr.entity.StaffAttendance;
 import in.schoolapp.school.AcademicYearService;
 import in.schoolapp.school.ClassSectionService;
 import in.schoolapp.school.dto.ClassResponse;
@@ -51,6 +53,7 @@ public class TeacherAllocationService {
     private final StaffRepository staffRepository;
     private final TimetableEntryRepository entryRepository;
     private final TimetablePeriodRepository periodRepository;
+    private final in.schoolapp.hr.repository.StaffAttendanceRepository staffAttendanceRepository;
 
     @Transactional(readOnly = true)
     public TeacherAllocationOverviewResponse getOverview(UUID tenantId) {
@@ -156,6 +159,106 @@ public class TeacherAllocationService {
             assignments.size(), workingDays, periodsPerDay);
 
         return new TeacherAllocationOverviewResponse(summary, classAllocations, teachers, now);
+    }
+
+    /**
+     * Real-time operational snapshot for the Live Teaching Monitor: who is teaching now, who is
+     * free this period, what runs next period, and who is on leave/absent today.
+     */
+    @Transactional(readOnly = true)
+    public LiveMonitorResponse getLiveMonitor(UUID tenantId) {
+        int dow = LocalDate.now().getDayOfWeek().getValue();
+        LocalTime now = LocalTime.now();
+
+        Map<UUID, Staff> staffById = staffRepository.findBySchoolIdAndActiveTrueOrderByFirstName(tenantId).stream()
+            .filter(s -> TEACHING_ROLES.contains(s.getRole()))
+            .collect(Collectors.toMap(Staff::getId, s -> s, (a, b) -> a, LinkedHashMap::new));
+        Map<UUID, Subject> subjectsById = subjectRepository.findBySchoolIdOrderByName(tenantId).stream()
+            .collect(Collectors.toMap(Subject::getId, s -> s));
+        List<TimetableEntry> entries = entryRepository.findBySchoolId(tenantId);
+        List<TimetablePeriod> teachingPeriods = periodRepository.findBySchoolIdOrderBySortOrderAsc(tenantId)
+            .stream().filter(p -> !p.isBreakSlot()).toList();
+
+        Map<UUID, String> sectionLabel = new LinkedHashMap<>();
+        for (ClassResponse c : classSectionService.listClasses(tenantId)) {
+            for (SectionResponse s : c.sections()) sectionLabel.put(s.id(), c.name() + " - " + s.name());
+        }
+
+        // On leave / absent today.
+        Set<UUID> onLeaveIds = new java.util.HashSet<>();
+        List<LiveMonitorResponse.LeaveEntry> onLeave = new ArrayList<>();
+        for (StaffAttendance a : staffAttendanceRepository.findBySchoolIdAndAttendanceDate(tenantId, LocalDate.now())) {
+            if ((a.getStatus() == StaffAttendance.StaffAttendanceStatus.LEAVE
+                    || a.getStatus() == StaffAttendance.StaffAttendanceStatus.ABSENT)
+                    && staffById.containsKey(a.getStaffId())) {
+                onLeaveIds.add(a.getStaffId());
+                onLeave.add(new LiveMonitorResponse.LeaveEntry(
+                    a.getStaffId(), staffById.get(a.getStaffId()).displayName(), a.getStatus().name()));
+            }
+        }
+
+        TimetablePeriod current = teachingPeriods.stream()
+            .filter(p -> p.getStartTime() != null && p.getEndTime() != null
+                && !now.isBefore(p.getStartTime()) && now.isBefore(p.getEndTime()))
+            .findFirst().orElse(null);
+        TimetablePeriod next = teachingPeriods.stream()
+            .filter(p -> p.getStartTime() != null && p.getStartTime().isAfter(now))
+            .findFirst().orElse(null);
+
+        // Teaching now.
+        Set<UUID> teachingNowIds = new java.util.HashSet<>();
+        List<LiveMonitorResponse.OngoingClass> teachingNow = new ArrayList<>();
+        if (current != null) {
+            for (TimetableEntry e : entries) {
+                if (e.getDayOfWeek() == dow && current.getId().equals(e.getPeriodId()) && e.getTeacherId() != null) {
+                    teachingNowIds.add(e.getTeacherId());
+                    teachingNow.add(new LiveMonitorResponse.OngoingClass(
+                        e.getTeacherId(),
+                        staffById.containsKey(e.getTeacherId()) ? staffById.get(e.getTeacherId()).displayName() : "—",
+                        sectionLabel.getOrDefault(e.getSectionId(), "—"),
+                        subjectName(subjectsById, e.getSubjectId()),
+                        current.getName()));
+                }
+            }
+            teachingNow.sort((a, b) -> a.teacherName().compareToIgnoreCase(b.teacherName()));
+        }
+
+        // Free now = teaching staff not teaching this period and not on leave.
+        List<LiveMonitorResponse.FreeTeacher> freeNow = staffById.values().stream()
+            .filter(s -> !teachingNowIds.contains(s.getId()) && !onLeaveIds.contains(s.getId()))
+            .map(s -> new LiveMonitorResponse.FreeTeacher(s.getId(), s.displayName(), s.getRole().name()))
+            .toList();
+
+        // Upcoming = next period's classes.
+        List<LiveMonitorResponse.UpcomingClass> upcoming = new ArrayList<>();
+        if (next != null) {
+            for (TimetableEntry e : entries) {
+                if (e.getDayOfWeek() == dow && next.getId().equals(e.getPeriodId()) && e.getTeacherId() != null) {
+                    upcoming.add(new LiveMonitorResponse.UpcomingClass(
+                        staffById.containsKey(e.getTeacherId()) ? staffById.get(e.getTeacherId()).displayName() : "—",
+                        sectionLabel.getOrDefault(e.getSectionId(), "—"),
+                        subjectName(subjectsById, e.getSubjectId()),
+                        next.getStartTime() != null ? next.getStartTime().toString() : "—"));
+                }
+            }
+            upcoming.sort((a, b) -> a.teacherName().compareToIgnoreCase(b.teacherName()));
+        }
+
+        return new LiveMonitorResponse(
+            periodInfo(current), periodInfo(next),
+            teachingNow, freeNow, upcoming, onLeave,
+            new LiveMonitorResponse.Counts(staffById.size(), teachingNowIds.size(), freeNow.size(), onLeave.size()));
+    }
+
+    private static LiveMonitorResponse.PeriodInfo periodInfo(TimetablePeriod p) {
+        if (p == null) return null;
+        return new LiveMonitorResponse.PeriodInfo(p.getName(),
+            p.getStartTime() != null ? p.getStartTime().toString() : null,
+            p.getEndTime() != null ? p.getEndTime().toString() : null);
+    }
+
+    private static String subjectName(Map<UUID, Subject> subjects, UUID subjectId) {
+        return subjectId != null && subjects.containsKey(subjectId) ? subjects.get(subjectId).getName() : "—";
     }
 
     private NowTeaching computeNow(List<TimetableEntry> entries, List<TimetablePeriod> periods,

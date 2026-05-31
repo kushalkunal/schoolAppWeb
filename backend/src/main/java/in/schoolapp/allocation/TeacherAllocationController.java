@@ -1,5 +1,6 @@
 package in.schoolapp.allocation;
 
+import in.schoolapp.allocation.dto.LiveMonitorResponse;
 import in.schoolapp.allocation.dto.TeacherAllocationOverviewResponse;
 import in.schoolapp.common.ApiResponse;
 import in.schoolapp.auth.AppRoles;
@@ -28,5 +29,12 @@ public class TeacherAllocationController {
     @PreAuthorize(AppRoles.OWNER_OR_ADMIN)
     public ApiResponse<TeacherAllocationOverviewResponse> overview(@PathVariable UUID tenantId) {
         return ApiResponse.success(service.getOverview(tenantId));
+    }
+
+    /** Real-time teaching snapshot for the Live Teaching Monitor / command center. */
+    @GetMapping("/live-monitor")
+    @PreAuthorize(AppRoles.OWNER_OR_ADMIN)
+    public ApiResponse<LiveMonitorResponse> liveMonitor(@PathVariable UUID tenantId) {
+        return ApiResponse.success(service.getLiveMonitor(tenantId));
     }
 }
