@@ -9,6 +9,8 @@ import { academicsApi } from '@/api/endpoints/academics';
 import { schoolApi } from '@/api/endpoints/school';
 import { hrApi } from '@/api/endpoints/hr';
 import { calendarApi } from '@/api/endpoints/calendar';
+import { substitutionApi } from '@/api/endpoints/substitution';
+import Link from 'next/link';
 import { useAuth } from '@/auth/AuthProvider';
 import { Card, CardBody, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -320,6 +322,13 @@ export default function SchedulePage() {
   });
   const weekDays = (calendarQ.data?.workingDays ?? DEFAULT_WORKING_DAYS)
     .slice().sort((a, b) => a - b).map((n) => ({ iso: n, label: DAY_LABELS[n] ?? `Day ${n}` }));
+  // Classes this teacher must cover today as a substitute (temporary attendance rights).
+  const subTodayQ = useQuery({
+    queryKey: ['my-substitutions-today', tenantId],
+    queryFn: () => substitutionApi.myToday(tenantId),
+    enabled: !!tenantId,
+    staleTime: 60_000,
+  });
 
   const classNameMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -415,6 +424,50 @@ export default function SchedulePage() {
           </Button>
         )}
       </div>
+
+      {/* Today's substitute classes — you have temporary rights to take attendance for these. */}
+      {(subTodayQ.data?.length ?? 0) > 0 && (
+        <Card className="p-0 overflow-hidden border-amber-200">
+          <CardHeader className="py-3 bg-amber-50">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Replace size={16} className="text-amber-600" /> Today&apos;s Substitute Classes
+            </CardTitle>
+            <CardDescription>You are covering these classes today — you can take their attendance during the period.</CardDescription>
+          </CardHeader>
+          <CardBody className="p-0 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="border-b border-slate-100">
+                <tr className="text-left text-xs uppercase tracking-wide text-slate-400">
+                  <th className="px-4 py-2 font-medium">Class</th>
+                  <th className="px-4 py-2 font-medium">Subject</th>
+                  <th className="px-4 py-2 font-medium">Period</th>
+                  <th className="px-4 py-2 font-medium">Attendance</th>
+                  <th className="px-4 py-2" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {subTodayQ.data!.map((c, i) => (
+                  <tr key={i} className="hover:bg-slate-50/60">
+                    <td className="px-4 py-2 font-medium">{c.sectionLabel}</td>
+                    <td className="px-4 py-2">{c.subjectName}</td>
+                    <td className="px-4 py-2">{c.periodName} {c.startTime ? `(${c.startTime.slice(0, 5)}–${(c.endTime ?? '').slice(0, 5)})` : ''}</td>
+                    <td className="px-4 py-2">
+                      {c.attendanceSubmitted ? <Badge tone="success">Submitted</Badge> : <Badge tone="warning">Pending</Badge>}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      {!c.attendanceSubmitted && (
+                        <Link href={`/tenants/${tenantId}/attendance`} className="text-primary text-xs font-medium hover:underline">
+                          Take attendance →
+                        </Link>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </CardBody>
+        </Card>
+      )}
 
       {/* ------------------------------------------------------------------ */}
       {/* TODAY'S CLASSES (includes substitution slots)                       */}

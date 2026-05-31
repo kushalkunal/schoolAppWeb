@@ -55,4 +55,26 @@ public final class SubstitutionDtos {
         int pendingSubstitutions,
         int classesWithoutTeacher
     ) {}
+
+    /** A substitution class the logged-in substitute must cover today (for their dashboard). */
+    public record MyTodayClass(
+        UUID sectionId,
+        String sectionLabel,
+        String subjectName,
+        String periodName,
+        String startTime,
+        String endTime,
+        boolean attendanceSubmitted
+    ) {}
+
+    /** One row of the permanent substitution / teaching-coverage history. */
+    public record HistoryRow(
+        java.time.LocalDate date,
+        String substituteName,
+        String absentTeacherName,
+        String sectionLabel,
+        String subjectName,
+        String periodName,
+        String attendanceMarkedBy
+    ) {}
 }

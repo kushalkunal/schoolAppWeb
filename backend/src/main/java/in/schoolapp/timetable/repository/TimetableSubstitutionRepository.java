@@ -18,4 +18,7 @@ public interface TimetableSubstitutionRepository extends JpaRepository<Timetable
     List<TimetableSubstitution> findByAbsentTeacherIdAndDate(UUID absentTeacherId, LocalDate date);
 
     List<TimetableSubstitution> findByDateAndSchoolId(LocalDate date, UUID schoolId);
+
+    List<TimetableSubstitution> findBySchoolIdAndDateBetweenOrderByDateDesc(
+        UUID schoolId, LocalDate from, LocalDate to);
 }

@@ -163,9 +163,10 @@ public class AttendanceService {
         log.info("Attendance submitted tenantId={} sectionId={} date={} present={} absent={} late={}",
             tenantId, section.getId(), date, presentCount, absentCount, lateCount);
 
-        // Record the lock when the class teacher of this specific section submits.
-        // Principals/admins re-submitting do NOT re-lock (lock is already present or they intentionally override).
-        if ("CLASS_TEACHER".equals(role) && staffId.equals(section.getClassTeacherId())) {
+        // Lock when a non-admin submits — the section's class teacher OR an authorized substitute
+        // (both are the only non-admins who get here). Records submittedBy = who marked, so the lock
+        // doubles as the "attendance marked by" audit. Principals/admins override without re-locking.
+        if (!isPrincipalOrAdmin) {
             AttendanceSectionLock lock = lockRepository
                 .findBySectionIdAndDate(sectionId, date)
                 .orElseGet(() -> {

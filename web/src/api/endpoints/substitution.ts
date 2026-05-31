@@ -19,6 +19,15 @@ export interface SubDashboard {
   absentTeachers: number; substitutionsAssigned: number; pendingSubstitutions: number; classesWithoutTeacher: number;
 }
 
+export interface MyTodayClass {
+  sectionId: string; sectionLabel: string; subjectName: string;
+  periodName: string; startTime: string | null; endTime: string | null; attendanceSubmitted: boolean;
+}
+export interface HistoryRow {
+  date: string; substituteName: string; absentTeacherName: string;
+  sectionLabel: string; subjectName: string; periodName: string; attendanceMarkedBy: string;
+}
+
 const q = (date?: string) => (date ? { date } : {});
 
 export const substitutionApi = {
@@ -33,5 +42,11 @@ export const substitutionApi = {
   },
   dashboard(tenantId: string, date?: string): Promise<SubDashboard> {
     return apiGet(`/api/v1/tenants/${tenantId}/substitution/dashboard`, q(date));
+  },
+  myToday(tenantId: string): Promise<MyTodayClass[]> {
+    return apiGet(`/api/v1/tenants/${tenantId}/substitution/my-today`);
+  },
+  history(tenantId: string, from?: string, to?: string): Promise<HistoryRow[]> {
+    return apiGet(`/api/v1/tenants/${tenantId}/substitution/history`, { ...(from ? { from } : {}), ...(to ? { to } : {}) });
   },
 };

@@ -4,6 +4,7 @@ import in.schoolapp.academics.entity.Subject;
 import in.schoolapp.academics.entity.TeacherSubjectAssignment;
 import in.schoolapp.academics.repository.SubjectRepository;
 import in.schoolapp.academics.repository.TeacherSubjectAssignmentRepository;
+import in.schoolapp.attendance.repository.AttendanceSectionLockRepository;
 import in.schoolapp.common.AppException;
 import in.schoolapp.common.ErrorCode;
 import in.schoolapp.hr.entity.LeaveApplication;
@@ -62,6 +63,7 @@ public class SubstitutionPlannerService {
     private final AcademicYearService academicYearService;
     private final ClassSectionService classSectionService;
     private final TimetableService timetableService;
+    private final AttendanceSectionLockRepository lockRepository;
 
     // ── Absent teachers today (attendance + approved leave) ──────────────────────
     @Transactional(readOnly = true)
@@ -241,6 +243,86 @@ public class SubstitutionPlannerService {
         int pending = affected.size() - (int) covered;
 
         return new SubstitutionDashboard(absentIds.size(), subsToday.size(), Math.max(0, pending), Math.max(0, pending));
+    }
+
+    // ── Substitute's own classes today (their dashboard) ────────────────────────
+    @Transactional(readOnly = true)
+    public List<MyTodayClass> myTodayClasses(UUID tenantId, UUID staffId) {
+        LocalDate today = LocalDate.now();
+        int dow = today.getDayOfWeek().getValue();
+        Map<UUID, String> sectionLabel = sectionLabels(tenantId);
+        Map<UUID, TimetablePeriod> periods = periodRepository.findBySchoolIdOrderBySortOrderAsc(tenantId)
+            .stream().collect(Collectors.toMap(TimetablePeriod::getId, p -> p));
+        Map<UUID, Subject> subjects = subjectRepository.findBySchoolIdOrderByName(tenantId)
+            .stream().collect(Collectors.toMap(Subject::getId, s -> s));
+        Map<String, UUID> subjBySlot = subjectBySlot(tenantId, dow);
+
+        List<MyTodayClass> out = new ArrayList<>();
+        for (TimetableSubstitution s : substitutionRepository.findBySubstituteTeacherIdAndDate(staffId, today)) {
+            if (!tenantId.equals(s.getSchoolId())) continue;
+            TimetablePeriod p = periods.get(s.getPeriodId());
+            UUID subjId = subjBySlot.get(s.getSectionId() + "|" + s.getPeriodId());
+            out.add(new MyTodayClass(
+                s.getSectionId(),
+                sectionLabel.getOrDefault(s.getSectionId(), "—"),
+                subjId != null && subjects.containsKey(subjId) ? subjects.get(subjId).getName() : "—",
+                p != null ? p.getName() : "—",
+                p != null && p.getStartTime() != null ? p.getStartTime().toString() : null,
+                p != null && p.getEndTime() != null ? p.getEndTime().toString() : null,
+                lockRepository.existsBySectionIdAndDate(s.getSectionId(), today)));
+        }
+        out.sort(Comparator.comparing(MyTodayClass::startTime, Comparator.nullsLast(Comparator.naturalOrder())));
+        return out;
+    }
+
+    // ── Permanent substitution / coverage history (admin) ───────────────────────
+    @Transactional(readOnly = true)
+    public List<HistoryRow> history(UUID tenantId, LocalDate from, LocalDate to) {
+        Map<UUID, Staff> staff = staffRepository.findBySchoolIdAndActiveTrueOrderByFirstName(tenantId)
+            .stream().collect(Collectors.toMap(Staff::getId, s -> s, (a, b) -> a));
+        Map<UUID, String> sectionLabel = sectionLabels(tenantId);
+        Map<UUID, TimetablePeriod> periods = periodRepository.findBySchoolIdOrderBySortOrderAsc(tenantId)
+            .stream().collect(Collectors.toMap(TimetablePeriod::getId, p -> p));
+        Map<UUID, Subject> subjects = subjectRepository.findBySchoolIdOrderByName(tenantId)
+            .stream().collect(Collectors.toMap(Subject::getId, s -> s));
+
+        List<HistoryRow> rows = new ArrayList<>();
+        for (TimetableSubstitution s : substitutionRepository
+                .findBySchoolIdAndDateBetweenOrderByDateDesc(tenantId, from, to)) {
+            int dow = s.getDate().getDayOfWeek().getValue();
+            UUID subjId = subjectBySlot(tenantId, dow).get(s.getSectionId() + "|" + s.getPeriodId());
+            String markedBy = lockRepository.findBySectionIdAndDate(s.getSectionId(), s.getDate())
+                .map(l -> staffName(staff, l.getSubmittedBy())).orElse("Not marked");
+            rows.add(new HistoryRow(
+                s.getDate(),
+                staffName(staff, s.getSubstituteTeacherId()),
+                staffName(staff, s.getAbsentTeacherId()),
+                sectionLabel.getOrDefault(s.getSectionId(), "—"),
+                subjId != null && subjects.containsKey(subjId) ? subjects.get(subjId).getName() : "—",
+                periods.containsKey(s.getPeriodId()) ? periods.get(s.getPeriodId()).getName() : "—",
+                markedBy));
+        }
+        return rows;
+    }
+
+    /** subjectId keyed by "sectionId|periodId" for a given weekday (from the regular timetable). */
+    private Map<String, UUID> subjectBySlot(UUID tenantId, int dow) {
+        return entryRepository.findBySchoolId(tenantId).stream()
+            .filter(e -> e.getDayOfWeek() == dow && e.getSubjectId() != null)
+            .collect(Collectors.toMap(e -> e.getSectionId() + "|" + e.getPeriodId(),
+                TimetableEntry::getSubjectId, (a, b) -> a));
+    }
+
+    private Map<UUID, String> sectionLabels(UUID tenantId) {
+        Map<UUID, String> m = new HashMap<>();
+        for (ClassResponse c : classSectionService.listClasses(tenantId)) {
+            for (SectionResponse s : c.sections()) m.put(s.id(), c.name() + " - " + s.name());
+        }
+        return m;
+    }
+
+    private static String staffName(Map<UUID, Staff> staff, UUID id) {
+        return id != null && staff.containsKey(id) ? staff.get(id).displayName() : "—";
     }
 
     private Map<UUID, Staff> teachingStaff(UUID tenantId) {

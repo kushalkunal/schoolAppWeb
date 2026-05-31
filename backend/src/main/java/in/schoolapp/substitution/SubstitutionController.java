@@ -59,4 +59,22 @@ public class SubstitutionController {
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         return ApiResponse.success(planner.dashboard(tenantId, orToday(date)));
     }
+
+    /** The logged-in substitute's classes for today ("Today's Substitute Classes" dashboard). */
+    @GetMapping("/my-today")
+    @PreAuthorize(AppRoles.ANY_TEACHER)   // overrides the class-level admin-only rule
+    public ApiResponse<List<MyTodayClass>> myToday(@PathVariable UUID tenantId) {
+        return ApiResponse.success(planner.myTodayClasses(tenantId, in.schoolapp.common.TenantContext.getStaffId()));
+    }
+
+    /** Permanent substitution / coverage history with who marked attendance (audit trail). */
+    @GetMapping("/history")
+    public ApiResponse<List<HistoryRow>> history(
+        @PathVariable UUID tenantId,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        LocalDate t = LocalDate.now();
+        return ApiResponse.success(planner.history(tenantId,
+            from == null ? t.minusDays(30) : from, to == null ? t : to));
+    }
 }
