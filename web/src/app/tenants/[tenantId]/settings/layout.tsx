@@ -20,6 +20,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
     { label: 'Branding',   href: `/tenants/${tenantId}/settings/branding` },
     { label: 'Classes',    href: `/tenants/${tenantId}/settings/classes` },
     { label: 'Subjects',   href: `/tenants/${tenantId}/settings/subjects` },
+    { label: 'Calendar',   href: `/tenants/${tenantId}/settings/calendar` },
     { label: 'Templates',  href: `/tenants/${tenantId}/settings/templates` },
   ];
   const visibleTabs = tabs.filter((t) => !t.flag || isFeatureEnabled(t.flag));
