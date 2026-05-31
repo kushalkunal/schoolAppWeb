@@ -50,6 +50,7 @@ class AttendanceServiceTest {
     @Mock ClassSectionService classSectionService;
     @Mock StaffRepository staffRepository;
     @Mock ApplicationEventPublisher events;
+    @Mock in.schoolapp.calendar.SchoolCalendarService calendarService;
 
     @InjectMocks
     AttendanceService service;
@@ -68,6 +69,12 @@ class AttendanceServiceTest {
 
     @BeforeEach
     void setUpFixtures() {
+        // Default: the school is open. Tests that throw before the calendar gate (RBAC) never
+        // call this — hence lenient to avoid unnecessary-stubbing failures.
+        org.mockito.Mockito.lenient()
+            .when(calendarService.isWorkingDay(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+            .thenReturn(true);
+
         section = new Section();
         section.setId(sectionId);
         section.setSchoolId(tenantId);

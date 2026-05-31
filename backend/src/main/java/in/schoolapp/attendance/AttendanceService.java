@@ -52,6 +52,7 @@ public class AttendanceService {
     private final ClassSectionService classSectionService;
     private final StaffRepository staffRepository;
     private final ApplicationEventPublisher events;
+    private final in.schoolapp.calendar.SchoolCalendarService calendarService;
 
     @Transactional
     public AttendanceSubmitResponse submitAttendance(
@@ -70,6 +71,14 @@ public class AttendanceService {
                 throw new AppException(ErrorCode.SECTION_NOT_ASSIGNED,
                     "You are not the class teacher of this section");
             }
+        }
+
+        // Calendar gate: the school must be open on this date (a configured working weekday and
+        // not a holiday). Keeps attendance off Sundays/holidays per the per-tenant school calendar.
+        if (!calendarService.isWorkingDay(tenantId, date)) {
+            throw new AppException(ErrorCode.VALIDATION_ERROR,
+                "School is closed on " + date + " (non-working day or holiday). "
+                    + "Adjust working days / holidays under Settings → Calendar if this is wrong.");
         }
 
         // Lock check: once a CLASS_TEACHER has submitted attendance, non-principal cannot re-submit.
