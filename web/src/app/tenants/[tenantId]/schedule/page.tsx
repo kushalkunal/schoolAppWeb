@@ -8,6 +8,7 @@ import { timetableApi } from '@/api/endpoints/timetable';
 import { academicsApi } from '@/api/endpoints/academics';
 import { schoolApi } from '@/api/endpoints/school';
 import { hrApi } from '@/api/endpoints/hr';
+import { calendarApi } from '@/api/endpoints/calendar';
 import { useAuth } from '@/auth/AuthProvider';
 import { Card, CardBody, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -27,8 +28,10 @@ import type {
   TimetableEntryResponse,
 } from '@/types/domain';
 
-const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const DAY_ISO = [1, 2, 3, 4, 5, 6];
+const DAY_LABELS: Record<number, string> = {
+  1: 'Monday', 2: 'Tuesday', 3: 'Wednesday', 4: 'Thursday', 5: 'Friday', 6: 'Saturday', 7: 'Sunday',
+};
+const DEFAULT_WORKING_DAYS = [1, 2, 3, 4, 5, 6];
 
 const ADMIN_ROLES = new Set(['SCHOOL_OWNER', 'PRINCIPAL', 'ADMIN']);
 
@@ -308,6 +311,15 @@ export default function SchedulePage() {
     enabled: !!tenantId,
     retry: false,
   });
+  // Weekly grid follows the school's configured working days (Settings → Calendar).
+  const calendarQ = useQuery({
+    queryKey: ['calendar', tenantId],
+    queryFn: () => calendarApi.get(tenantId),
+    enabled: !!tenantId,
+    staleTime: 60_000,
+  });
+  const weekDays = (calendarQ.data?.workingDays ?? DEFAULT_WORKING_DAYS)
+    .slice().sort((a, b) => a - b).map((n) => ({ iso: n, label: DAY_LABELS[n] ?? `Day ${n}` }));
 
   const classNameMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -486,8 +498,7 @@ export default function SchedulePage() {
       {entries.length > 0 && teachingPeriods.length > 0 && (
         <div className="space-y-4">
           <h2 className="text-base font-semibold text-slate-700">Weekly schedule</h2>
-          {DAYS.map((dayLabel, idx) => {
-            const isoDay = DAY_ISO[idx]!;
+          {weekDays.map(({ iso: isoDay, label: dayLabel }) => {
             const dayEntries = entryMap.get(isoDay);
             if (!dayEntries || dayEntries.size === 0) return null;
             const isToday = isoDay === todayIsoDay;

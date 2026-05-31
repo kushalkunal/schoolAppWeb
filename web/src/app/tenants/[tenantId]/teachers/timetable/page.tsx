@@ -22,6 +22,7 @@ import { timetableApi } from '@/api/endpoints/timetable';
 import { schoolApi } from '@/api/endpoints/school';
 import { academicsApi } from '@/api/endpoints/academics';
 import { roomsApi, type Classroom } from '@/api/endpoints/rooms';
+import { calendarApi } from '@/api/endpoints/calendar';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { ErrorBanner } from '@/components/ui/ErrorBanner';
@@ -37,13 +38,10 @@ import type {
   UpsertTimetableEntryRequest,
 } from '@/types/domain';
 
-const DAYS = [
-  { n: 1, label: 'Monday' },
-  { n: 2, label: 'Tuesday' },
-  { n: 3, label: 'Wednesday' },
-  { n: 4, label: 'Thursday' },
-  { n: 5, label: 'Friday' },
-];
+const DAY_LABELS: Record<number, string> = {
+  1: 'Monday', 2: 'Tuesday', 3: 'Wednesday', 4: 'Thursday', 5: 'Friday', 6: 'Saturday', 7: 'Sunday',
+};
+const DEFAULT_WORKING_DAYS = [1, 2, 3, 4, 5];
 
 export default function TimetablePage() {
   const params = useParams();
@@ -93,6 +91,15 @@ export default function TimetablePage() {
     enabled: !!tenantId,
     staleTime: 5 * 60_000,
   });
+  // Columns follow the school's configured working days (Settings → Calendar), not a fixed Mon–Fri.
+  const calendarQ = useQuery({
+    queryKey: ['calendar', tenantId],
+    queryFn: () => calendarApi.get(tenantId),
+    enabled: !!tenantId,
+    staleTime: 60_000,
+  });
+  const days = (calendarQ.data?.workingDays ?? DEFAULT_WORKING_DAYS)
+    .slice().sort((a, b) => a - b).map((n) => ({ n, label: DAY_LABELS[n] ?? `Day ${n}` }));
 
   const deletePeriod = useMutation({
     mutationFn: (periodId: string) => timetableApi.deletePeriod(tenantId, periodId),
@@ -225,7 +232,7 @@ export default function TimetablePage() {
                   <th className="px-3 py-2 text-left text-xs font-medium text-slate-600 uppercase border-b border-slate-200 w-28">
                     Period
                   </th>
-                  {DAYS.map((d) => (
+                  {days.map((d) => (
                     <th
                       key={d.n}
                       className="px-3 py-2 text-center text-xs font-medium text-slate-600 uppercase border-b border-slate-200"
@@ -244,7 +251,7 @@ export default function TimetablePage() {
                         {period.startTime.slice(0, 5)} – {period.endTime.slice(0, 5)}
                       </div>
                     </td>
-                    {DAYS.map((day) => {
+                    {days.map((day) => {
                       const entry = entryMap.get(entryKey(period.id, day.n));
                       return (
                         <td
@@ -452,7 +459,7 @@ function SlotEditorModal({
     onSuccess,
   });
 
-  const dayLabel = DAYS.find((d) => d.n === dayOfWeek)?.label ?? '';
+  const dayLabel = DAY_LABELS[dayOfWeek] ?? '';
 
   return (
     <Modal
