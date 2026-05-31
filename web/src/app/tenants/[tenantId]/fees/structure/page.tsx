@@ -13,6 +13,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
+import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CheckCircle2, ChevronDown, Plus, Save, Send, Settings2, X,
@@ -227,6 +228,12 @@ function FeeConfigInner() {
         icon={<Settings2 size={18} />}
         title="Fee configuration"
         description="Fees set per class apply to all sections automatically."
+        actions={
+          <Link href={`/tenants/${tenantId}/fees/monthly`}
+            className="text-sm font-medium text-primary hover:underline whitespace-nowrap">
+            Monthly fee setup →
+          </Link>
+        }
       />
 
       {/* ── Session bar ── */}
