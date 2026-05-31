@@ -2,6 +2,7 @@ package in.schoolapp.documents;
 
 import in.schoolapp.branding.BrandingService;
 import in.schoolapp.documents.repository.DocumentTemplateRepository;
+import in.schoolapp.pdf.OpenHtmlToPdfRenderer;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -57,6 +58,14 @@ class DocumentRenderingTest {
             new DocumentVerificationService("test-secret-test-secret-test-secret-123", "http://localhost:8081"));
     }
 
+    /** Renders the HTML through the real openhtmltopdf engine — catches XHTML/entity issues
+     *  (e.g. an undeclared &nbsp;) that a Thymeleaf-only render would silently pass. */
+    private void assertRendersToPdf(String html) {
+        byte[] pdf = new OpenHtmlToPdfRenderer().render(html, "classpath:/templates/");
+        assertThat(pdf.length).isGreaterThan(1000);
+        assertThat(new String(pdf, 0, 5, java.nio.charset.StandardCharsets.ISO_8859_1)).startsWith("%PDF");
+    }
+
     private Map<String, Object> student() {
         return Map.of("displayName", "Riya Sharma", "admissionNumber", "ADM-2025-0042");
     }
@@ -87,6 +96,7 @@ class DocumentRenderingTest {
         assertThat(html).contains("https://cdn.example.com/principal-sign.png");    // signature image
         assertThat(html).contains("Vidya Mandir School");                           // branding
         assertThat(html).contains("#0a7c4a");                                       // brand colour
+        assertRendersToPdf(html);
     }
 
     @Test
@@ -104,6 +114,7 @@ class DocumentRenderingTest {
         assertThat(html).contains("data:image/png;base64,");
         assertThat(html).contains("Dr. A. Mehta");
         assertThat(html).contains("Vidya Mandir School");
+        assertRendersToPdf(html);
     }
 
     @Test
@@ -148,6 +159,7 @@ class DocumentRenderingTest {
         assertThat(html).contains("A diligent and curious student."); // remarks populated
         assertThat(html).contains("data:image/png;base64,");       // QR
         assertThat(html).contains("Dr. A. Mehta");                 // signature
+        assertRendersToPdf(html);
     }
 
     @Test

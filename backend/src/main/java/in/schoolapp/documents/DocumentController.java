@@ -1,9 +1,8 @@
 package in.schoolapp.documents;
 
 import in.schoolapp.academics.ExamService;
-import in.schoolapp.academics.ReportCardService;
+import in.schoolapp.academics.ReportCardDocumentService;
 import in.schoolapp.academics.dto.ExamResponse;
-import in.schoolapp.academics.dto.ReportCardResponse;
 import in.schoolapp.auth.AppRoles;
 import in.schoolapp.common.ApiResponse;
 import in.schoolapp.common.AppException;
@@ -65,7 +64,7 @@ public class DocumentController {
     private final SchoolService schoolService;
     private final FamilyService familyService;
     private final ExamService examService;
-    private final ReportCardService reportCardService;
+    private final ReportCardDocumentService reportCardDocumentService;
     private final FeeInvoiceRepository feeInvoiceRepository;
 
     // ---------------- Transfer Certificate ----------------
@@ -207,36 +206,9 @@ public class DocumentController {
         @PathVariable UUID studentId,
         @PathVariable UUID examId
     ) {
-        ReportCardResponse rc = reportCardService.getReportCard(tenantId, studentId, examId);
-        SchoolResponse school = schoolService.getSchool(tenantId);
-        StudentProfileResponse profile = familyService.getProfile(tenantId, studentId);
-        ExamResponse exam = examService.listCurrentYearExams(tenantId).stream()
-            .filter(e -> e.id().equals(examId)).findFirst()
-            .orElseThrow(() -> new IllegalArgumentException("Exam not found"));
-
-        Map<String, Object> model = new LinkedHashMap<>();
-        model.put("school", school);
-        model.put("exam", exam);
-        model.put("student", profile.student());
-        model.put("enrollment", profile.currentEnrollment());
-        model.put("academicYearName",
-            profile.currentEnrollment() != null ? profile.currentEnrollment().academicYearName() : "—");
-        // Per-subject marks, attendance summary and class-teacher remarks come from the
-        // detail builder so the marks table + attendance + remarks blocks all populate.
-        var detail = reportCardService.getReportCardDetail(tenantId, studentId, examId);
-        model.put("subjectRows", detail.subjectRows());
-        model.put("attendance", detail.attendance());
-        model.put("totalMaxMarks", rc.totalMarks());
-        model.put("totalObtainedMarks", rc.obtainedMarks());
-        model.put("overallPercentage", rc.percentage());
-        model.put("overallGrade", rc.grade());
-        model.put("rankInClass", rc.rankInClass());
-        model.put("classTeacherRemarks", detail.teacherRemarks());
-        model.put("documentRef", profile.student().admissionNumber() != null
-            ? profile.student().admissionNumber() : studentId.toString());
-        model.put("issueDate", LocalDate.now());
-
-        var generated = documentService.generate(tenantId, DocumentType.REPORT_CARD, model);
+        // Unified renderer — same Thymeleaf document (QR + signature + branding + per-subject
+        // marks + attendance + remarks) the bulk publish path produces.
+        var generated = reportCardDocumentService.renderPdf(tenantId, studentId, examId);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_PDF);
