@@ -150,6 +150,7 @@ public class StaffService {
         staff.setRole(req.role());
         staff.setGender(blankToNull(req.gender()));
         staff.setDateOfJoining(req.dateOfJoining());
+        if (req.profile() != null) staff.setProfile(req.profile().toMap());
         staff.setActive(true);
         staff.setIdentifierVerified(true);           // email supplied by admin → trusted
         staff.setIdentifierVerifiedAt(OffsetDateTime.now());
@@ -260,6 +261,13 @@ public class StaffService {
         if (req.dateOfJoining() != null) staff.setDateOfJoining(req.dateOfJoining());
         if (req.role()      != null && staff.getRole() != StaffRole.PRINCIPAL)
             staff.setRole(req.role());
+        if (req.profile()   != null) {
+            // Merge non-null profile fields onto the existing profile (partial update).
+            java.util.Map<String, Object> merged = staff.getProfile() == null
+                ? new java.util.LinkedHashMap<>() : new java.util.LinkedHashMap<>(staff.getProfile());
+            merged.putAll(req.profile().toMap());
+            staff.setProfile(merged);
+        }
         staff = staffRepository.save(staff);
         auditLogger.logUpdate(schoolId, "Staff", staffId,
             java.util.Map.of("name", (Object) staff.displayName()),

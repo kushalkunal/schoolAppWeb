@@ -114,6 +114,11 @@ public class Staff {
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
 
+    /** Extended profile: identity (Aadhaar/PAN), bank, and professional details. */
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb", nullable = false)
+    private java.util.Map<String, Object> profile = new java.util.HashMap<>();
+
     public String displayName() {
         return lastName == null || lastName.isBlank() ? firstName : firstName + " " + lastName;
     }

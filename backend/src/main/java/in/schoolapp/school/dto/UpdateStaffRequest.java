@@ -17,5 +17,6 @@ public record UpdateStaffRequest(
     @Email @Size(max = 255) String email,
     @Size(max = 10)  String gender,
     LocalDate dateOfJoining,
-    StaffRole role
+    StaffRole role,
+    @jakarta.validation.Valid StaffProfile profile
 ) {}

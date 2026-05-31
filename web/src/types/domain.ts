@@ -81,6 +81,7 @@ export interface StaffResponse {
   role: StaffRole;
   active: boolean;
   mustResetPassword: boolean;
+  profile?: Record<string, unknown>;   // sensitive numbers masked to last 4
 }
 
 export interface UpdateStaffRequest {
@@ -91,6 +92,7 @@ export interface UpdateStaffRequest {
   gender?: string;
   dateOfJoining?: string;
   role?: StaffRole;
+  profile?: StaffProfile;
 }
 
 export interface CreateStaffRequest {
@@ -99,6 +101,23 @@ export interface CreateStaffRequest {
   phone: string;
   email?: string;
   role: StaffRole;
+}
+
+/** Extended teacher/staff profile — identity (Aadhaar/PAN), bank and professional details. */
+export interface StaffProfile {
+  dateOfBirth?: string;
+  address?: string;
+  emergencyContact?: string;
+  qualification?: string;
+  designation?: string;
+  experienceYears?: number | null;
+  employeeCode?: string;
+  employmentType?: string;
+  aadhaarNumber?: string;
+  panNumber?: string;
+  bankName?: string;
+  bankAccountNumber?: string;
+  ifscCode?: string;
 }
 
 export interface InviteTeacherRequest {
@@ -110,6 +129,7 @@ export interface InviteTeacherRequest {
   gender?: string;
   dateOfJoining?: string;
   classTeacherSectionId?: string;
+  profile?: StaffProfile;
 }
 
 // ---------- Student ----------

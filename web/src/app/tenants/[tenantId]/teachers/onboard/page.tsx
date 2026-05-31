@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/Badge';
 import { OWNER_OR_ADMIN, RequireRole } from '@/auth/RequireRole';
 import { useHasRole } from '@/auth/RequireRole';
 import { cn } from '@/lib/utils';
-import type { InviteTeacherRequest, StaffResponse, UpdateStaffRequest } from '@/types/domain';
+import type { InviteTeacherRequest, StaffProfile, StaffResponse, UpdateStaffRequest } from '@/types/domain';
 
 const TEACHER_ROLES = [
   { value: 'CLASS_TEACHER',   label: 'Class Teacher' },
@@ -23,6 +23,14 @@ const TEACHER_ROLES = [
 ] as const;
 
 const GENDERS = ['MALE', 'FEMALE', 'OTHER'];
+
+function SectionHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="pt-1 text-xs font-semibold uppercase tracking-wide text-slate-400 border-t border-slate-100 mt-1">
+      {children}
+    </div>
+  );
+}
 
 const ROLE_LABELS: Record<string, string> = {
   CLASS_TEACHER: 'Class Teacher',
@@ -461,6 +469,10 @@ function InviteTeacherModal({
   const sectionOptions = (classesQ.data ?? []).flatMap((c) =>
     c.sections.map((s) => ({ id: s.id, label: `${c.name} - ${s.name}` })));
 
+  const p: StaffProfile = form.profile ?? {};
+  const setP = (patch: Partial<StaffProfile>) =>
+    setForm((f) => ({ ...f, profile: { ...(f.profile ?? {}), ...patch } }));
+
   const invite = useMutation({
     mutationFn: () => schoolApi.inviteTeacher(tenantId, form),
     onSuccess: () => {
@@ -579,8 +591,66 @@ function InviteTeacherModal({
             </label>
           )}
 
+          {/* ── Professional details ── */}
+          <SectionHeading>Professional details</SectionHeading>
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Qualification" placeholder="B.Ed, M.Sc" value={p.qualification ?? ''}
+              onChange={(e) => setP({ qualification: e.target.value })} />
+            <Input label="Designation" placeholder="Senior Teacher" value={p.designation ?? ''}
+              onChange={(e) => setP({ designation: e.target.value })} />
+            <Input label="Experience (years)" type="number" value={p.experienceYears ?? ''}
+              onChange={(e) => setP({ experienceYears: e.target.value ? Number(e.target.value) : null })} />
+            <Input label="Employee code" value={p.employeeCode ?? ''}
+              onChange={(e) => setP({ employeeCode: e.target.value })} />
+            <label className="block col-span-2">
+              <span className="text-sm text-slate-700 mb-1 inline-block">Employment type</span>
+              <select value={p.employmentType ?? ''} onChange={(e) => setP({ employmentType: e.target.value })}
+                className="block w-full rounded border border-slate-300 px-3 py-2 text-sm">
+                <option value="">— select —</option>
+                {['FULL_TIME', 'PART_TIME', 'CONTRACT', 'VISITING'].map((t) => (
+                  <option key={t} value={t}>{t.replace('_', ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {/* ── Identity (KYC) ── */}
+          <SectionHeading>Identity (KYC)</SectionHeading>
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Aadhaar number" placeholder="XXXX XXXX XXXX" value={p.aadhaarNumber ?? ''}
+              onChange={(e) => setP({ aadhaarNumber: e.target.value })} />
+            <Input label="PAN number" placeholder="ABCDE1234F" value={p.panNumber ?? ''}
+              onChange={(e) => setP({ panNumber: e.target.value })} />
+          </div>
+
+          {/* ── Bank / account ── */}
+          <SectionHeading>Bank account (for payroll)</SectionHeading>
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Bank name" value={p.bankName ?? ''}
+              onChange={(e) => setP({ bankName: e.target.value })} />
+            <Input label="Account number" value={p.bankAccountNumber ?? ''}
+              onChange={(e) => setP({ bankAccountNumber: e.target.value })} />
+            <Input label="IFSC code" placeholder="HDFC0001234" value={p.ifscCode ?? ''}
+              onChange={(e) => setP({ ifscCode: e.target.value })} />
+          </div>
+
+          {/* ── Personal ── */}
+          <SectionHeading>Personal</SectionHeading>
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Date of birth" type="date" value={p.dateOfBirth ?? ''}
+              onChange={(e) => setP({ dateOfBirth: e.target.value })} />
+            <Input label="Emergency contact" type="tel" value={p.emergencyContact ?? ''}
+              onChange={(e) => setP({ emergencyContact: e.target.value })} />
+            <div className="col-span-2">
+              <label className="block text-sm text-slate-700 mb-1">Address</label>
+              <textarea className="w-full rounded border border-slate-300 px-3 py-2 text-sm" rows={2}
+                value={p.address ?? ''} onChange={(e) => setP({ address: e.target.value })} />
+            </div>
+          </div>
+
           <p className="text-xs text-slate-500 bg-slate-50 rounded px-3 py-2">
-            A temporary password will be generated and emailed to the teacher. They must change it on first login.
+            Identity & bank numbers are stored securely and shown masked (last 4 digits) afterwards.
+            A temporary password is emailed to the teacher; they must change it on first login.
           </p>
 
           <div className="flex justify-end gap-2 pt-2">

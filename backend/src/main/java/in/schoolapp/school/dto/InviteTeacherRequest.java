@@ -26,5 +26,7 @@ public record InviteTeacherRequest(
     @Size(max = 20) String gender,
     LocalDate dateOfJoining,
     /** If set and role is CLASS_TEACHER, the teacher is made class teacher of this section. */
-    UUID classTeacherSectionId
+    UUID classTeacherSectionId,
+    /** Full teacher profile — identity (Aadhaar/PAN), bank, professional details. */
+    @jakarta.validation.Valid StaffProfile profile
 ) {}
