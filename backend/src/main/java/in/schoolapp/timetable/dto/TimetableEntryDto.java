@@ -14,10 +14,11 @@ public record TimetableEntryDto(
     @Min(1) @Max(7) int dayOfWeek,
     UUID subjectId,                       // null = free period
     UUID teacherId,
+    UUID roomId,                          // null = no fixed room
     String note
 ) {
     public static TimetableEntryDto from(TimetableEntry e) {
         return new TimetableEntryDto(e.getId(), e.getSectionId(), e.getPeriodId(),
-            e.getDayOfWeek(), e.getSubjectId(), e.getTeacherId(), e.getNote());
+            e.getDayOfWeek(), e.getSubjectId(), e.getTeacherId(), e.getRoomId(), e.getNote());
     }
 }

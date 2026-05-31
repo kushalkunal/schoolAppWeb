@@ -204,6 +204,7 @@ export interface TimetableEntryResponse {
   dayOfWeek: number;
   subjectId: string | null;
   teacherId: string | null;
+  roomId: string | null;
   note: string | null;
 }
 
@@ -214,6 +215,7 @@ export interface UpsertTimetableEntryRequest {
   dayOfWeek: number;
   subjectId?: string;
   teacherId?: string;
+  roomId?: string;
   note?: string;
 }
 

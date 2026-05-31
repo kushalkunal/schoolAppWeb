@@ -113,6 +113,12 @@ public class TimetableService {
                 throw new AppException(ErrorCode.FORBIDDEN, "Entry not in this school");
             }
         } else {
+            // Overlap guard: a section can't have two classes in the same period on the same day.
+            if (entryRepository.existsBySectionIdAndDayOfWeekAndPeriodId(
+                    req.sectionId(), req.dayOfWeek(), req.periodId())) {
+                throw new AppException(ErrorCode.VALIDATION_ERROR,
+                    "This class already has a period scheduled in this slot — edit or clear it first");
+            }
             e = new TimetableEntry();
             e.setSchoolId(tenantId);
             e.setSectionId(req.sectionId());
@@ -138,8 +144,27 @@ public class TimetableService {
             }
         }
 
+        // Room conflict: the same room cannot host two different sections in the same period+day.
+        if (req.roomId() != null) {
+            UUID excludeId = e.getId();
+            boolean roomClash = entryRepository
+                .findByPeriodIdAndDayOfWeek(req.periodId(), req.dayOfWeek())
+                .stream()
+                .anyMatch(existing ->
+                    req.roomId().equals(existing.getRoomId())
+                    && existing.getSchoolId().equals(tenantId)
+                    && !existing.getSectionId().equals(req.sectionId())
+                    && (excludeId == null || !existing.getId().equals(excludeId))
+                );
+            if (roomClash) {
+                throw new AppException(ErrorCode.VALIDATION_ERROR,
+                    "This room is already booked by another class in this period on this day");
+            }
+        }
+
         e.setSubjectId(req.subjectId());
         e.setTeacherId(req.teacherId());
+        e.setRoomId(req.roomId());
         e.setNote(req.note());
         return TimetableEntryDto.from(entryRepository.save(e));
     }
@@ -178,7 +203,7 @@ public class TimetableService {
             if (sub.getSchoolId().equals(tenantId)) {
                 result.add(new TimetableEntryDto(
                     sub.getId(), sub.getSectionId(), sub.getPeriodId(),
-                    todayDow, null, sub.getSubstituteTeacherId(),
+                    todayDow, null, sub.getSubstituteTeacherId(), null,
                     "[Substitution] " + (sub.getReason() != null ? sub.getReason() : "")));
             }
         }

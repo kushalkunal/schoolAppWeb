@@ -24,6 +24,7 @@ export default function AcademicPlanningLayout({ children }: { children: React.R
     { label: 'Teacher Allocations', href: `${root}/allocations` },
     { label: 'Subject Allocations', href: `${root}/subjects` },
     { label: 'Timetable',           href: `${root}/timetable` },
+    { label: 'Rooms',               href: `${root}/rooms` },
     { label: 'Replacement',         href: `${root}/replacement` },
   ];
 

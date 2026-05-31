@@ -40,6 +40,9 @@ public class TimetableEntry extends BaseEntity {
     @Column(name = "teacher_id")
     private UUID teacherId;
 
+    @Column(name = "room_id")
+    private UUID roomId;
+
     @Column(columnDefinition = "TEXT")
     private String note;
 }

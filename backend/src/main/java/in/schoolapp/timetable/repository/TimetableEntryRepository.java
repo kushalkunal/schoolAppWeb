@@ -15,6 +15,9 @@ public interface TimetableEntryRepository extends JpaRepository<TimetableEntry, 
     /** All entries scheduled in a given period on a given weekday (across all sections). */
     List<TimetableEntry> findByPeriodIdAndDayOfWeek(UUID periodId, int dayOfWeek);
 
+    /** Guards the (section, day, period) uniqueness — a class can't have two classes in one slot. */
+    boolean existsBySectionIdAndDayOfWeekAndPeriodId(UUID sectionId, int dayOfWeek, UUID periodId);
+
     List<TimetableEntry> findByTeacherId(UUID teacherId);
 
     /** All timetable entries for a school — used by the allocation/workload overview. */

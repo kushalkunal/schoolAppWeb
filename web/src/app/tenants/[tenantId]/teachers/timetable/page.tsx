@@ -21,6 +21,7 @@ import { AlertTriangle, Clock, Plus, Trash2 } from 'lucide-react';
 import { timetableApi } from '@/api/endpoints/timetable';
 import { schoolApi } from '@/api/endpoints/school';
 import { academicsApi } from '@/api/endpoints/academics';
+import { roomsApi, type Classroom } from '@/api/endpoints/rooms';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { ErrorBanner } from '@/components/ui/ErrorBanner';
@@ -83,6 +84,12 @@ export default function TimetablePage() {
   const subjectsQ = useQuery({
     queryKey: ['subjects', tenantId],
     queryFn: () => academicsApi.listSubjects(tenantId),
+    enabled: !!tenantId,
+    staleTime: 5 * 60_000,
+  });
+  const roomsQ = useQuery({
+    queryKey: ['classrooms', tenantId],
+    queryFn: () => roomsApi.list(tenantId),
     enabled: !!tenantId,
     staleTime: 5 * 60_000,
   });
@@ -318,6 +325,7 @@ export default function TimetablePage() {
           entry={slotEdit.entry}
           teachers={teachers}
           subjects={subjectsQ.data ?? []}
+          rooms={roomsQ.data ?? []}
           onClose={() => setSlotEdit(null)}
           onSuccess={() => {
             setSlotEdit(null);
@@ -411,7 +419,7 @@ function AddPeriodModal({
 // ---- Slot Editor Modal ----
 function SlotEditorModal({
   tenantId, sectionId, periodId, dayOfWeek, entry,
-  teachers, subjects, onClose, onSuccess,
+  teachers, subjects, rooms, onClose, onSuccess,
 }: {
   tenantId: string;
   sectionId: string;
@@ -420,11 +428,13 @@ function SlotEditorModal({
   entry: TimetableEntryResponse | null;
   teachers: StaffResponse[];
   subjects: SubjectResponse[];
+  rooms: Classroom[];
   onClose: () => void;
   onSuccess: () => void;
 }) {
   const [teacherId, setTeacherId] = useState(entry?.teacherId ?? '');
   const [subjectId, setSubjectId] = useState(entry?.subjectId ?? '');
+  const [roomId, setRoomId] = useState(entry?.roomId ?? '');
 
   const save = useMutation({
     mutationFn: () => {
@@ -435,6 +445,7 @@ function SlotEditorModal({
         dayOfWeek,
         teacherId: teacherId || undefined,
         subjectId: subjectId || undefined,
+        roomId: roomId || undefined,
       };
       return timetableApi.upsertEntry(tenantId, req);
     },
@@ -483,6 +494,20 @@ function SlotEditorModal({
             <option value="">— no subject —</option>
             {subjects.map((s) => (
               <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+        </label>
+
+        <label className="block">
+          <span className="text-sm text-slate-700 mb-1 inline-block">Room</span>
+          <select
+            className="block w-full rounded border border-slate-300 px-3 py-2 text-sm"
+            value={roomId}
+            onChange={(e) => setRoomId(e.target.value)}
+          >
+            <option value="">— no room —</option>
+            {rooms.map((r) => (
+              <option key={r.id} value={r.id}>{r.name}{r.building ? ` · ${r.building}` : ''}</option>
             ))}
           </select>
         </label>
