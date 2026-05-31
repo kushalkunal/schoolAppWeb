@@ -10,9 +10,10 @@ export default function TeachersLayout({ children }: { children: React.ReactNode
   const tenantId = typeof params.tenantId === 'string' ? params.tenantId : '';
 
   const tabs = [
-    { label: 'Onboard',    href: `/tenants/${tenantId}/teachers/onboard` },
-    { label: 'Classes',    href: `/tenants/${tenantId}/teachers/classes` },
-    { label: 'Timetable',  href: `/tenants/${tenantId}/teachers/timetable` },
+    { label: 'Command Center', href: `/tenants/${tenantId}/teachers/allocation` },
+    { label: 'Onboard',        href: `/tenants/${tenantId}/teachers/onboard` },
+    { label: 'Classes',        href: `/tenants/${tenantId}/teachers/classes` },
+    { label: 'Timetable',      href: `/tenants/${tenantId}/teachers/timetable` },
   ];
 
   return (

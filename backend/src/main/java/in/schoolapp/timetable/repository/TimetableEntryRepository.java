@@ -16,4 +16,7 @@ public interface TimetableEntryRepository extends JpaRepository<TimetableEntry, 
     List<TimetableEntry> findByPeriodIdAndDayOfWeek(UUID periodId, int dayOfWeek);
 
     List<TimetableEntry> findByTeacherId(UUID teacherId);
+
+    /** All timetable entries for a school — used by the allocation/workload overview. */
+    List<TimetableEntry> findBySchoolId(UUID schoolId);
 }
