@@ -11,33 +11,38 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Simple token-bucket rate limiter, keyed on the authenticated staff id (falling back to IP
- * for pre-auth endpoints). In-memory + single-instance — adequate for the Phase-1 deployment
- * topology (one Spring Boot node). A Redis-backed variant is an easy swap: replace {@link
- * #buckets} with a Redis INCR + TTL.
+ * Fixed-window rate limiter, keyed on the authenticated staff id (falling back to IP for
+ * pre-auth endpoints). The counter lives in <b>Redis</b> ({@code INCR} + {@code EXPIRE}), so the
+ * limit is enforced <b>globally across every backend instance</b> — running N nodes behind a load
+ * balancer no longer multiplies the effective limit by N (the failure mode of the old in-memory
+ * {@code ConcurrentHashMap} bucket). Same pattern already used for OTP throttling in
+ * {@code OtpService}.
+ * <p>
+ * Fail-open: if Redis is briefly unreachable we allow the request rather than locking everyone
+ * out — availability beats strict enforcement during an infra blip.
  * <p>
  * Applied to the whole {@code /api/v1/**} surface except auth endpoints (which have their own
- * OTP-request throttling inside {@code OtpService}). Runs after the JWT filter so the staff id
- * is already populated in {@link TenantContext}.
+ * OTP-request throttling). Runs after the JWT filter so the staff id is already populated in
+ * {@link TenantContext}.
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class RateLimitFilter extends OncePerRequestFilter {
 
-    /** Per-key capacity refilled every window. 600 req/min is conservative for normal use
-     *  (10 req/sec) but lets the frontend fan out on dashboard load without tripping. */
+    /** Max requests per key per window. 600/min is conservative for normal use (10 req/sec) but
+     *  lets the frontend fan out on dashboard load without tripping. */
     @Value("${app.rate-limit.capacity:600}")
     private int capacity;
 
@@ -48,9 +53,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private boolean enabled;
 
     private final ObjectMapper objectMapper;
-
-    /** keyed on "staff:<uuid>" or "ip:<addr>". */
-    private final ConcurrentHashMap<String, Bucket> buckets = new ConcurrentHashMap<>();
+    private final StringRedisTemplate redis;
 
     @Override
     protected void doFilterInternal(@NonNull HttpServletRequest request,
@@ -62,9 +65,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         }
 
         String key = resolveKey(request);
-        Bucket bucket = buckets.computeIfAbsent(key, k -> new Bucket(capacity));
-        long now = System.currentTimeMillis() / 1000;
-        if (!bucket.tryConsume(now, capacity, windowSeconds)) {
+        if (!allowRequest(key)) {
             log.info("Rate limit exceeded key={} path={}", key, request.getRequestURI());
             response.setStatus(429);
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
@@ -75,6 +76,26 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return;
         }
         chain.doFilter(request, response);
+    }
+
+    /**
+     * Atomically increments the per-key counter in Redis. On the first hit of a window we set the
+     * TTL so the window auto-resets. Returns {@code true} when the request is within the cap, or on
+     * any Redis error (fail-open).
+     */
+    private boolean allowRequest(String key) {
+        String redisKey = "ratelimit:" + key;
+        try {
+            Long count = redis.opsForValue().increment(redisKey);
+            if (count == null) return true;            // unexpected null → don't block
+            if (count == 1L) {
+                redis.expire(redisKey, Duration.ofSeconds(windowSeconds));
+            }
+            return count <= capacity;
+        } catch (Exception e) {
+            log.warn("Rate-limit Redis unavailable, allowing request (key={}): {}", key, e.getMessage());
+            return true;
+        }
     }
 
     private boolean shouldSkip(HttpServletRequest req) {
@@ -94,31 +115,5 @@ public class RateLimitFilter extends OncePerRequestFilter {
             ? (xff.indexOf(',') < 0 ? xff.trim() : xff.substring(0, xff.indexOf(',')).trim())
             : req.getRemoteAddr();
         return "ip:" + ip;
-    }
-
-    /** Token bucket with coarse second-resolution refill. */
-    private static final class Bucket {
-        private final AtomicLong tokens;
-        private volatile long lastRefillSec;
-
-        Bucket(int initial) {
-            this.tokens = new AtomicLong(initial);
-            this.lastRefillSec = System.currentTimeMillis() / 1000;
-        }
-
-        synchronized boolean tryConsume(long nowSec, int capacity, long windowSec) {
-            long elapsed = nowSec - lastRefillSec;
-            if (elapsed > 0) {
-                long refill = (elapsed * capacity) / windowSec;
-                if (refill > 0) {
-                    long updated = Math.min(capacity, tokens.get() + refill);
-                    tokens.set(updated);
-                    lastRefillSec = nowSec;
-                }
-            }
-            if (tokens.get() <= 0) return false;
-            tokens.decrementAndGet();
-            return true;
-        }
     }
 }
