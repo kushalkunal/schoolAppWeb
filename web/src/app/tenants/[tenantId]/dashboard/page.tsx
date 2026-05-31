@@ -156,7 +156,30 @@ export default function DashboardPage() {
     return <ErrorBanner error={dashQ.error} onRetry={() => dashQ.refetch()} />;
   }
 
-  const d = dashQ.data!;
+  // Defensive normalisation: a freshly-onboarded school (or a partial API payload) can return
+  // a dashboard with missing sub-objects. Default every block so the page renders an empty
+  // overview instead of crashing on `undefined.present`.
+  const raw = dashQ.data;
+  if (!raw) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Dashboard" description="Today's overview" />
+        <EmptyState
+          icon={<Activity />}
+          title="Nothing to show yet"
+          description="Once attendance, fees and admissions data start flowing in, your daily overview will appear here."
+        />
+      </div>
+    );
+  }
+  const d = {
+    asOfDate: raw.asOfDate,
+    attendance: raw.attendance ?? { totalMarked: 0, present: 0, absent: 0, late: 0, halfDay: 0, leave: 0 },
+    alerts: raw.alerts ?? { total: 0, high: 0, critical: 0 },
+    fees: raw.fees ?? { mtdCollectedPaise: 0, activeAtRiskCount: 0 },
+    unmarkedSectionsCount: raw.unmarkedSectionsCount ?? 0,
+    topAtRisk: raw.topAtRisk ?? [],
+  };
   const present = d.attendance.present;
   const totalMarked = d.attendance.totalMarked;
   const attendancePct = totalMarked > 0 ? Math.round((present * 100) / totalMarked) : 0;

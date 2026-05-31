@@ -9,6 +9,9 @@ import in.schoolapp.academics.event.ReportCardGeneratedEvent;
 import in.schoolapp.academics.repository.ExamMarkRepository;
 import in.schoolapp.academics.repository.ReportCardRepository;
 import in.schoolapp.academics.repository.SubjectRepository;
+import in.schoolapp.attendance.entity.AttendanceRecord;
+import in.schoolapp.attendance.entity.AttendanceStatus;
+import in.schoolapp.attendance.repository.AttendanceRepository;
 import in.schoolapp.common.AppException;
 import in.schoolapp.common.ErrorCode;
 import in.schoolapp.school.ClassSectionService;
@@ -64,6 +67,7 @@ public class ReportCardService {
     private final ReportCardPdfGenerator pdfGenerator;
     private final ApplicationEventPublisher events;
     private final FileStorageService fileStorage;
+    private final AttendanceRepository attendanceRepository;
 
     /**
      * Generates or regenerates the full set of report cards for {@code section} at {@code exam}.
@@ -180,6 +184,73 @@ public class ReportCardService {
                 "Report card has not been generated yet"));
         return ReportCardResponse.from(card);
     }
+
+    /**
+     * Builds the rich per-subject + attendance + remarks view that the report-card PDF template
+     * needs (the aggregate {@link ReportCardResponse} alone leaves the marks table empty). Pure
+     * read; safe to call from the download endpoint.
+     */
+    @Transactional(readOnly = true)
+    public ReportCardDetail getReportCardDetail(UUID tenantId, UUID studentId, UUID examId) {
+        studentService.getStudentEntity(tenantId, studentId);
+        ReportCard card = reportCardRepository.findByStudentIdAndExamId(studentId, examId)
+            .orElseThrow(() -> new AppException(ErrorCode.REPORT_CARD_NOT_READY,
+                "Report card has not been generated yet"));
+
+        List<ExamMark> marks = markRepository.findByExamIdAndStudentId(examId, studentId);
+        Map<UUID, Subject> subjectsById = subjectRepository
+            .findAllById(marks.stream().map(ExamMark::getSubjectId).toList())
+            .stream().collect(Collectors.toMap(Subject::getId, s -> s));
+
+        List<Map<String, Object>> subjectRows = new ArrayList<>();
+        for (ExamMark m : marks.stream()
+                .sorted(Comparator.comparing(m -> {
+                    Subject s = subjectsById.get(m.getSubjectId());
+                    return s == null ? "" : s.getName();
+                })).toList()) {
+            Subject subj = subjectsById.get(m.getSubjectId());
+            BigDecimal pct = (m.getMaxMarks() != null && m.getMaxMarks().compareTo(BigDecimal.ZERO) > 0
+                    && m.getObtainedMarks() != null && !m.isAbsent())
+                ? m.getObtainedMarks().multiply(BigDecimal.valueOf(100))
+                    .divide(m.getMaxMarks(), 1, RoundingMode.HALF_UP)
+                : null;
+            Map<String, Object> row = new java.util.HashMap<>();
+            row.put("subjectName", subj != null ? subj.getName() : "(deleted subject)");
+            row.put("subjectCode", subj != null ? subj.getCode() : null);
+            row.put("maxMarks", m.getMaxMarks());
+            row.put("obtainedMarks", m.getObtainedMarks());
+            row.put("absent", m.isAbsent());
+            row.put("percentage", pct);
+            row.put("grade", m.getGrade());
+            row.put("remarks", null);
+            subjectRows.add(row);
+        }
+
+        // Attendance over the current academic session (rolling 12 months up to today).
+        java.time.LocalDate to = java.time.LocalDate.now();
+        java.time.LocalDate from = to.minusYears(1);
+        List<AttendanceRecord> recs =
+            attendanceRepository.findByStudentIdAndDateBetweenOrderByDateDesc(studentId, from, to);
+        long marked = recs.size();
+        long present = recs.stream()
+            .filter(r -> r.getStatus() == AttendanceStatus.PRESENT
+                      || r.getStatus() == AttendanceStatus.LATE
+                      || r.getStatus() == AttendanceStatus.HALF_DAY)
+            .count();
+        Map<String, Object> attendance = new java.util.LinkedHashMap<>();
+        attendance.put("marked", marked);
+        attendance.put("present", present);
+        attendance.put("absent", marked - present);
+        attendance.put("percentage", marked > 0
+            ? BigDecimal.valueOf(present * 100.0 / marked).setScale(1, RoundingMode.HALF_UP)
+            : null);
+
+        return new ReportCardDetail(subjectRows, attendance, card.getTeacherRemarks());
+    }
+
+    public record ReportCardDetail(List<Map<String, Object>> subjectRows,
+                                   Map<String, Object> attendance,
+                                   String teacherRemarks) {}
 
     /**
      * Persists via {@link FileStorageService} — LOCAL serves from disk, S3 returns a presigned

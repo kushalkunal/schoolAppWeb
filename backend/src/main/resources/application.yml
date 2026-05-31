@@ -118,6 +118,12 @@ app:
     secret: ${JWT_SECRET:dev-only-change-me-dev-only-change-me-dev-only-change-me-123456}
     access-token-expiry-minutes: ${JWT_ACCESS_TOKEN_EXPIRY_MINUTES:15}
     refresh-token-expiry-days: ${JWT_REFRESH_TOKEN_EXPIRY_DAYS:7}
+  documents:
+    # HMAC secret signing the QR verification token on admit cards / report cards / receipts.
+    # Defaults to the JWT secret; set a dedicated value in prod so doc tokens survive JWT rotation.
+    verify-secret: ${DOCUMENT_VERIFY_SECRET:${app.jwt.secret}}
+    # Public origin the QR encodes (the public /documents/verify endpoint lives here).
+    verify-base-url: ${DOCUMENT_VERIFY_BASE_URL:http://localhost:${server.port:8080}}
   otp:
     ttl-minutes: ${OTP_TTL_MINUTES:5}
     max-verify-attempts: ${OTP_MAX_ATTEMPTS:3}

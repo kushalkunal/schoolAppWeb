@@ -33,6 +33,7 @@ const BLANK: BrandingResponse = {
   contactPhone: '', contactEmail: '', address: '', websiteUrl: '',
   gstin: '',
   socialFacebook: '', socialInstagram: '', socialYoutube: '', socialX: '',
+  signatureUrl: '', signatoryName: '', signatoryTitle: '',
 };
 
 export default function BrandingPage() {
@@ -224,6 +225,33 @@ function BrandingInner() {
                   onChange={(e) => patch('address', e.target.value)}
                 />
               </div>
+            </CardBody>
+          </Card>
+
+          {/* Documents & signature — drives admit cards, report cards and fee receipts */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Documents & signature</CardTitle>
+              <p className="text-xs text-slate-500 mt-1">
+                The logo, primary colour and details above already brand your admit cards,
+                report cards and fee receipts. Add an authorising signature below — it prints
+                above the “Principal” line, alongside a QR code that lets anyone verify the
+                document is genuine.
+              </p>
+            </CardHeader>
+            <CardBody className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Input label="Signature image URL"
+                hint="PNG/JPG of the principal's signature (transparent background looks best)"
+                value={form.signatureUrl ?? ''}
+                onChange={(e) => patch('signatureUrl', e.target.value)} />
+              <Input label="Signatory name"
+                hint="Defaults to “Principal” if left blank"
+                value={form.signatoryName ?? ''}
+                onChange={(e) => patch('signatoryName', e.target.value)} />
+              <Input label="Signatory title"
+                placeholder="Principal"
+                value={form.signatoryTitle ?? ''}
+                onChange={(e) => patch('signatoryTitle', e.target.value)} />
             </CardBody>
           </Card>
 

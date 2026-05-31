@@ -31,7 +31,16 @@
         .remarks { margin-top: 12px; border: 1px solid #999; padding: 8px; }
         .remarks h4 { margin: 0 0 4px 0; font-size: 10pt; }
         .signatures { margin-top: 36px; display: table; width: 100%; }
-        .signature { display: table-cell; text-align: center; font-size: 9pt; color: #555; padding-top: 6px; border-top: 1px solid #333; width: 33%; }
+        .signature { display: table-cell; text-align: center; font-size: 9pt; color: #555; padding-top: 6px; border-top: 1px solid #333; width: 33%; vertical-align: bottom; }
+        .sig-img { max-height: 38px; max-width: 120px; display: block; margin: 0 auto 2px auto; }
+        .attendance { margin-top: 12px; display: table; width: 100%; border: 1px solid #999; }
+        .attendance .cell { display: table-cell; padding: 7px; text-align: center; border-right: 1px solid #ddd; width: 25%; }
+        .attendance .label { color: #555; font-size: 8.5pt; }
+        .attendance .value { font-size: 12pt; font-weight: bold; }
+        .verify-block { margin-top: 18px; display: table; width: 100%; }
+        .verify-block .qr-cell { display: table-cell; width: 86px; vertical-align: middle; }
+        .verify-block .qr-cell img { width: 76px; height: 76px; }
+        .verify-block .qr-text { display: table-cell; vertical-align: middle; font-size: 8pt; color: #666; padding-left: 8px; }
     </style>
 </head>
 <body>
@@ -113,6 +122,13 @@
         <div class="cell"><div class="label">Rank in Class</div><div class="value" th:text="${rankInClass ?: '—'}">—</div></div>
     </div>
 
+    <div class="attendance" th:if="${attendance != null}">
+        <div class="cell"><div class="label">Days Present</div><div class="value" th:text="${attendance.present}">0</div></div>
+        <div class="cell"><div class="label">Days Absent</div><div class="value" th:text="${attendance.absent}">0</div></div>
+        <div class="cell"><div class="label">Days Marked</div><div class="value" th:text="${attendance.marked}">0</div></div>
+        <div class="cell"><div class="label">Attendance %</div><div class="value" th:text="${attendance.percentage != null ? attendance.percentage + '%' : '—'}">—</div></div>
+    </div>
+
     <div class="remarks" th:if="${classTeacherRemarks != null and !classTeacherRemarks.isEmpty()}">
         <h4>Class teacher's remarks</h4>
         <p th:text="${classTeacherRemarks}">—</p>
@@ -120,8 +136,24 @@
 
     <div class="signatures">
         <div class="signature">Class Teacher</div>
-        <div class="signature">Principal</div>
+        <div class="signature">
+            <img class="sig-img"
+                 th:if="${branding != null and branding.signatureUrl != null and branding.signatureUrl != ''}"
+                 th:src="${branding.signatureUrl}" alt="signature" />
+            <span th:text="${branding != null and branding.signatoryName != null and branding.signatoryName != '' ? branding.signatoryName : 'Principal'}">Principal</span>
+            <div th:if="${branding != null and branding.signatoryTitle != null and branding.signatoryTitle != ''}"
+                 th:text="${branding.signatoryTitle}">Principal</div>
+        </div>
         <div class="signature">Parent / Guardian</div>
+    </div>
+
+    <!-- Tamper-evident verification QR: scan to confirm this report card is genuine. -->
+    <div class="verify-block" th:if="${qrCode != null}">
+        <div class="qr-cell"><img th:src="${qrCode}" alt="verification QR" /></div>
+        <div class="qr-text">
+            <strong>Scan to verify</strong> — this report card is digitally verifiable and was
+            issued by <span th:text="${school.name}">the school</span>.
+        </div>
     </div>
 </body>
 </html>

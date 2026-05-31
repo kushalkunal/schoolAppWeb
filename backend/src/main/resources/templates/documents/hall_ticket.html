@@ -26,6 +26,12 @@
         .instructions h3 { font-size: 11pt; margin-bottom: 4px; }
         .instructions ol { margin: 0 0 0 18px; }
         .seat { float: right; border: 1px solid #111; padding: 6px 12px; font-weight: bold; }
+        .sig-img { max-height: 40px; max-width: 120px; display: block; margin: 0 0 2px auto; }
+        .footer-block { margin-top: 24px; display: table; width: 100%; }
+        .footer-block .qr-cell { display: table-cell; width: 96px; vertical-align: bottom; }
+        .footer-block .qr-cell img { width: 80px; height: 80px; }
+        .footer-block .qr-cell .qr-cap { font-size: 7.5pt; color: #666; text-align: center; }
+        .footer-block .sign-cell { display: table-cell; vertical-align: bottom; text-align: right; font-size: 9pt; color: #555; }
     </style>
 </head>
 <body>
@@ -88,8 +94,19 @@
         </ol>
     </div>
 
-    <div style="margin-top: 30px; text-align: right; font-size: 9pt; color: #555;">
-        Authorised by Principal · <span th:text="${school.name}">School</span>
+    <div class="footer-block">
+        <div class="qr-cell" th:if="${qrCode != null}">
+            <img th:src="${qrCode}" alt="verification QR" />
+            <div class="qr-cap">Scan to verify</div>
+        </div>
+        <div class="sign-cell">
+            <img class="sig-img"
+                 th:if="${branding != null and branding.signatureUrl != null and branding.signatureUrl != ''}"
+                 th:src="${branding.signatureUrl}" alt="signature" />
+            <span th:text="${branding != null and branding.signatoryName != null and branding.signatoryName != '' ? branding.signatoryName : 'Principal'}">Principal</span><br/>
+            <span th:text="${branding != null and branding.signatoryTitle != null and branding.signatoryTitle != '' ? branding.signatoryTitle : 'Authorised by Principal'}">Authorised by Principal</span><br/>
+            <span th:text="${school.name}">School</span>
+        </div>
     </div>
 </div>
 </body>

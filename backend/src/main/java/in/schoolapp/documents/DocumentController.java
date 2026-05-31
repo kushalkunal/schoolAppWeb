@@ -221,16 +221,19 @@ public class DocumentController {
         model.put("enrollment", profile.currentEnrollment());
         model.put("academicYearName",
             profile.currentEnrollment() != null ? profile.currentEnrollment().academicYearName() : "—");
-        // Per-subject rows are deliberately empty by default — Slice 12 lays the pipeline;
-        // Slice 21 will surface ReportCardSubjectRow when the entity is extended. For now the
-        // aggregate is shown in the summary block of the template.
-        model.put("subjectRows", List.of());
+        // Per-subject marks, attendance summary and class-teacher remarks come from the
+        // detail builder so the marks table + attendance + remarks blocks all populate.
+        var detail = reportCardService.getReportCardDetail(tenantId, studentId, examId);
+        model.put("subjectRows", detail.subjectRows());
+        model.put("attendance", detail.attendance());
         model.put("totalMaxMarks", rc.totalMarks());
         model.put("totalObtainedMarks", rc.obtainedMarks());
         model.put("overallPercentage", rc.percentage());
         model.put("overallGrade", rc.grade());
         model.put("rankInClass", rc.rankInClass());
-        model.put("classTeacherRemarks", null);
+        model.put("classTeacherRemarks", detail.teacherRemarks());
+        model.put("documentRef", profile.student().admissionNumber() != null
+            ? profile.student().admissionNumber() : studentId.toString());
         model.put("issueDate", LocalDate.now());
 
         var generated = documentService.generate(tenantId, DocumentType.REPORT_CARD, model);

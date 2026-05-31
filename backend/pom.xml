@@ -104,6 +104,20 @@
             <version>${openpdf.version}</version>
         </dependency>
 
+        <!-- QR code generation for tamper-evident document verification (admit card,
+             report card, fee receipt). ZXing core encodes the bit-matrix; javase
+             rasterises it to a PNG we inline as a data-URI in the PDF. -->
+        <dependency>
+            <groupId>com.google.zxing</groupId>
+            <artifactId>core</artifactId>
+            <version>3.5.3</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.zxing</groupId>
+            <artifactId>javase</artifactId>
+            <version>3.5.3</version>
+        </dependency>
+
         <!-- SMTP email dispatch via JavaMailSender. Auto-config activates only when
              spring.mail.host is set, so a LOGGING-only profile pays no runtime cost. -->
         <dependency>

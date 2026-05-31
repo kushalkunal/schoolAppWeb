@@ -26,6 +26,10 @@ export interface BrandingResponse {
   socialInstagram: string | null;
   socialYoutube: string | null;
   socialX: string | null;
+  // Document signature block — printed on admit cards, report cards and fee receipts.
+  signatureUrl: string | null;
+  signatoryName: string | null;
+  signatoryTitle: string | null;
 }
 
 export const brandingApi = {

@@ -81,6 +81,9 @@ public class BrandingService {
         putIfNonBlank(branding, "socialInstagram", patch.socialInstagram());
         putIfNonBlank(branding, "socialYoutube",   patch.socialYoutube());
         putIfNonBlank(branding, "socialX",         patch.socialX());
+        putIfNonBlank(branding, "signatureUrl",    patch.signatureUrl());
+        putIfNonBlank(branding, "signatoryName",   patch.signatoryName());
+        putIfNonBlank(branding, "signatoryTitle",  patch.signatoryTitle());
 
         settings.put(SETTINGS_KEY, branding);
         s.setSettings(settings);
@@ -109,6 +112,9 @@ public class BrandingService {
         out.put("address",        r.address());
         out.put("websiteUrl",     r.websiteUrl());
         out.put("gstin",          r.gstin());
+        out.put("signatureUrl",   r.signatureUrl());
+        out.put("signatoryName",  r.signatoryName());
+        out.put("signatoryTitle", r.signatoryTitle());
         return out;
     }
 
@@ -142,7 +148,10 @@ public class BrandingService {
             str(branding, "socialFacebook"),
             str(branding, "socialInstagram"),
             str(branding, "socialYoutube"),
-            str(branding, "socialX")
+            str(branding, "socialX"),
+            str(branding, "signatureUrl"),
+            str(branding, "signatoryName"),
+            str(branding, "signatoryTitle")
         );
     }
 

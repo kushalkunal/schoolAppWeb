@@ -31,5 +31,10 @@ public record BrandingResponse(
     String socialFacebook,
     String socialInstagram,
     String socialYoutube,
-    String socialX
+    String socialX,
+    // Document signature block: a principal's signature image (PNG/JPG URL) plus the
+    // name + designation printed beneath it on admit cards, report cards and receipts.
+    String signatureUrl,
+    String signatoryName,
+    String signatoryTitle
 ) {}

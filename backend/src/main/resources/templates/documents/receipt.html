@@ -34,6 +34,11 @@
         .signatures { margin-top: 60px; }
         .signature  { display: inline-block; width: 33%; text-align: center; font-size: 9pt; color: #555; padding-top: 4px; border-top: 1px solid #333; }
         .footer-strip { margin-top: 24px; padding-top: 8px; border-top: 1px solid #ddd; font-size: 8pt; color: #777; text-align: center; }
+        .sig-img { max-height: 42px; max-width: 130px; display: block; margin: 0 auto 2px auto; }
+        .verify-block { margin-top: 18px; display: table; width: 100%; }
+        .verify-block .qr-cell { display: table-cell; width: 90px; vertical-align: middle; }
+        .verify-block .qr-cell img { width: 80px; height: 80px; }
+        .verify-block .qr-text { display: table-cell; vertical-align: middle; font-size: 8pt; color: #666; padding-left: 8px; }
     </style>
 </head>
 <body>
@@ -108,12 +113,30 @@
 
     <div class="signatures">
         <div class="signature">Cashier / Receipt issued by</div>
-        <div class="signature">Principal</div>
+        <div class="signature">
+            <img class="sig-img"
+                 th:if="${branding != null and branding.signatureUrl != null and branding.signatureUrl != ''}"
+                 th:src="${branding.signatureUrl}" alt="signature" />
+            <span th:text="${branding != null and branding.signatoryName != null and branding.signatoryName != '' ? branding.signatoryName : 'Principal'}">Principal</span>
+            <div class="muted"
+                 th:if="${branding != null and branding.signatoryTitle != null and branding.signatoryTitle != ''}"
+                 th:text="${branding.signatoryTitle}">Principal</div>
+        </div>
         <div class="signature">Parent / Guardian</div>
     </div>
 
-    <p class="muted text-center" style="margin-top: 30px;">
-        This is a computer-generated receipt. No physical signature required.
+    <!-- Tamper-evident verification QR: scan to confirm this receipt was issued by the school. -->
+    <div class="verify-block" th:if="${qrCode != null}">
+        <div class="qr-cell"><img th:src="${qrCode}" alt="verification QR" /></div>
+        <div class="qr-text">
+            <strong>Scan to verify</strong><br/>
+            This receipt is digitally verifiable. Scanning confirms it was issued by
+            <span th:text="${school.name}">the school</span> and has not been altered.
+        </div>
+    </div>
+
+    <p class="muted text-center" style="margin-top: 20px;">
+        This is a computer-generated receipt verifiable via the QR code above.
     </p>
     <div class="footer-strip"
          th:if="${branding != null and (branding.websiteUrl != null or branding.contactPhone != null or branding.contactEmail != null)}">

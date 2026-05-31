@@ -87,6 +87,10 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/v1/public/schools/*/admissions/enquiry").permitAll()
                 // Slice 22e: public branding read — frontend deploys fetch this on mount.
                 .requestMatchers(HttpMethod.GET, "/api/v1/public/schools/*/branding").permitAll()
+                // Public document verification — anyone scanning the QR on an admit card /
+                // report card / fee receipt validates the signed token. No tenant data leaks:
+                // the token itself carries (and the response echoes) only the doc identity.
+                .requestMatchers(HttpMethod.GET, "/api/v1/public/documents/verify").permitAll()
                 .requestMatchers("/webhooks/**").permitAll()
                 // Locally-hosted receipts + report cards. Path segments contain unguessable
                 // UUIDs; acceptable for now. Only active when app.storage.provider=LOCAL.

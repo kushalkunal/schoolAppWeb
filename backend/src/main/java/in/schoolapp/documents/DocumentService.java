@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 import org.thymeleaf.TemplateEngine;
+import org.thymeleaf.spring6.SpringTemplateEngine;
 import org.thymeleaf.context.Context;
 import org.thymeleaf.templateresolver.ClassLoaderTemplateResolver;
 import org.thymeleaf.templateresolver.StringTemplateResolver;
@@ -52,17 +53,28 @@ public class DocumentService {
      * school's white-label identity without each template having to fetch it.
      */
     private final BrandingService brandingService;
+    /**
+     * QR-based provenance: every document gets a {@code qrCode} (data-URI) + {@code verifyUrl}
+     * model variable pointing at the public verification endpoint, so a scanner can confirm the
+     * document was genuinely issued by this school and is unaltered.
+     */
+    private final QrCodeGenerator qrCodeGenerator;
+    private final DocumentVerificationService verificationService;
 
     public DocumentService(DocumentTemplateRepository templateRepository,
                            PdfTemplateRenderer pdfRenderer,
                            FileStorageService fileStorage,
                            ApplicationContext applicationContext,
-                           BrandingService brandingService) {
+                           BrandingService brandingService,
+                           QrCodeGenerator qrCodeGenerator,
+                           DocumentVerificationService verificationService) {
         this.templateRepository = templateRepository;
         this.pdfRenderer = pdfRenderer;
         this.fileStorage = fileStorage;
         this.applicationContext = applicationContext;
         this.brandingService = brandingService;
+        this.qrCodeGenerator = qrCodeGenerator;
+        this.verificationService = verificationService;
     }
 
     /** Lazy-init Thymeleaf engines so tests can override without booting auto-config. */
@@ -106,10 +118,36 @@ public class DocumentService {
             ctx.setVariable("branding", java.util.Map.of());
         }
 
+        // Provenance QR: a signed verification URL encoded as a scannable QR. Templates that
+        // don't reference `qrCode` are unaffected. Never block the doc on QR failure.
+        try {
+            String reference = verificationReference(model);
+            String verifyUrl = verificationService.verifyUrl(schoolId, type, reference);
+            ctx.setVariable("verifyUrl", verifyUrl);
+            ctx.setVariable("qrCode", qrCodeGenerator.pngDataUri(verifyUrl, 220));
+        } catch (Exception e) {
+            log.warn("QR/verification unavailable for school={} type={} ({}). Rendering without it.",
+                schoolId, type, e.getMessage());
+        }
+
         // 1. Per-school override?
         return templateRepository.findBySchoolIdAndDocumentType(schoolId, type)
             .map(t -> renderInline(t, ctx))
             .orElseGet(() -> renderClasspath(type, ctx));
+    }
+
+    /**
+     * Human-readable identifier baked into the verification token, so a school can cross-check
+     * a scanned document against its own records. Each call site may set an explicit
+     * {@code documentRef}; otherwise we fall back to the well-known per-type key.
+     */
+    private String verificationReference(Map<String, Object> model) {
+        for (String key : new String[]{"documentRef", "receiptNumber", "admitCardNo",
+                                        "certificateNumber", "tcNumber"}) {
+            Object v = model.get(key);
+            if (v != null && !v.toString().isBlank()) return v.toString();
+        }
+        return "-";
     }
 
     private String renderClasspath(DocumentType type, Context ctx) {
@@ -123,7 +161,10 @@ public class DocumentService {
     }
 
     private String renderInline(DocumentTemplate t, Context ctx) {
-        TemplateEngine engine = new TemplateEngine();
+        // SpringTemplateEngine (SpEL dialect) — the templates use SpEL idioms like the Elvis
+        // operator (a ?: b) and Map property access, which the plain OGNL StandardDialect can't
+        // evaluate. Spring's dialect also registers MapAccessor so ${student.field} works on Maps.
+        SpringTemplateEngine engine = new SpringTemplateEngine();
         StringTemplateResolver resolver = new StringTemplateResolver();
         resolver.setTemplateMode("HTML");
         engine.setTemplateResolver(resolver);
@@ -140,7 +181,7 @@ public class DocumentService {
     }
 
     private TemplateEngine buildClasspathEngine() {
-        TemplateEngine engine = new TemplateEngine();
+        SpringTemplateEngine engine = new SpringTemplateEngine();
         ClassLoaderTemplateResolver resolver = new ClassLoaderTemplateResolver();
         resolver.setPrefix("templates/");
         resolver.setSuffix(".html");
