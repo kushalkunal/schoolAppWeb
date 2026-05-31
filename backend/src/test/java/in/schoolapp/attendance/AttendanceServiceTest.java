@@ -37,6 +37,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -51,6 +52,8 @@ class AttendanceServiceTest {
     @Mock StaffRepository staffRepository;
     @Mock ApplicationEventPublisher events;
     @Mock in.schoolapp.calendar.SchoolCalendarService calendarService;
+    @Mock in.schoolapp.timetable.repository.TimetableSubstitutionRepository substitutionRepository;
+    @Mock in.schoolapp.timetable.repository.TimetablePeriodRepository periodRepository;
 
     @InjectMocks
     AttendanceService service;
@@ -173,6 +176,63 @@ class AttendanceServiceTest {
             AttendanceSubmitResponse resp = service.submitAttendance(tenantId, sectionId, req);
 
             assertThat(resp.total()).isEqualTo(1);
+        }
+
+        // ── Substitute teacher temporary attendance rights ──────────────────
+        @Test
+        void substitute_withActiveSubstitution_canSubmit() {
+            UUID sub = UUID.randomUUID();   // a substitute, NOT the section's class teacher
+            UUID periodId = UUID.randomUUID();
+            TenantContext.set(tenantId, sub, "SUBJECT_TEACHER");
+            when(classSectionService.getSectionOrThrow(tenantId, sectionId)).thenReturn(section);
+
+            var subst = new in.schoolapp.timetable.entity.TimetableSubstitution();
+            subst.setSchoolId(tenantId); subst.setSectionId(sectionId); subst.setPeriodId(periodId);
+            subst.setSubstituteTeacherId(sub);
+            when(substitutionRepository.findBySubstituteTeacherIdAndDate(sub, today)).thenReturn(List.of(subst));
+            var period = new in.schoolapp.timetable.entity.TimetablePeriod();   // no time bounds → valid all day
+            when(periodRepository.findById(periodId)).thenReturn(Optional.of(period));
+
+            lenient().when(lockRepository.existsBySectionIdAndDate(sectionId, today)).thenReturn(false);
+            lenient().when(lockRepository.findBySectionIdAndDate(sectionId, today)).thenReturn(Optional.empty());
+            when(enrollmentRepository.findBySectionIdAndStatus(sectionId, EnrollmentStatus.ACTIVE))
+                .thenReturn(List.of(enrollment));
+            lenient().when(attendanceRepository.findByStudentIdAndDate(studentId, today)).thenReturn(Optional.empty());
+            when(attendanceRepository.save(any())).thenReturn(savedRecord);
+            lenient().when(lockRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            AttendanceSubmitResponse resp = service.submitAttendance(
+                tenantId, sectionId, new SubmitAttendanceRequest(today, List.of()));
+            assertThat(resp.total()).isEqualTo(1);   // substitute was allowed to submit
+        }
+
+        @Test
+        void substitute_forDifferentSection_isForbidden() {
+            UUID sub = UUID.randomUUID();
+            TenantContext.set(tenantId, sub, "SUBJECT_TEACHER");
+            when(classSectionService.getSectionOrThrow(tenantId, sectionId)).thenReturn(section);
+            var subst = new in.schoolapp.timetable.entity.TimetableSubstitution();
+            subst.setSchoolId(tenantId); subst.setSectionId(UUID.randomUUID()); // a DIFFERENT section
+            subst.setPeriodId(UUID.randomUUID()); subst.setSubstituteTeacherId(sub);
+            when(substitutionRepository.findBySubstituteTeacherIdAndDate(sub, today)).thenReturn(List.of(subst));
+
+            assertThatThrownBy(() -> service.submitAttendance(
+                    tenantId, sectionId, new SubmitAttendanceRequest(today, List.of())))
+                .isInstanceOf(AppException.class)
+                .matches(e -> ((AppException) e).getErrorCode() == ErrorCode.SECTION_NOT_ASSIGNED);
+        }
+
+        @Test
+        void teacher_withNoSubstitution_isForbidden() {
+            UUID rando = UUID.randomUUID();
+            TenantContext.set(tenantId, rando, "SUBJECT_TEACHER");
+            when(classSectionService.getSectionOrThrow(tenantId, sectionId)).thenReturn(section);
+            when(substitutionRepository.findBySubstituteTeacherIdAndDate(rando, today)).thenReturn(List.of());
+
+            assertThatThrownBy(() -> service.submitAttendance(
+                    tenantId, sectionId, new SubmitAttendanceRequest(today, List.of())))
+                .isInstanceOf(AppException.class)
+                .matches(e -> ((AppException) e).getErrorCode() == ErrorCode.SECTION_NOT_ASSIGNED);
         }
 
         @Test

@@ -36,7 +36,9 @@ public class AttendanceController {
     private final AttendanceAnalyticsService analyticsService;
 
     @PostMapping("/sections/{sectionId}/attendance")
-    @PreAuthorize(AppRoles.ATTENDANCE_WRITER)
+    // Any teacher may reach this; the service authorizes the specific section (class teacher of it,
+    // or a substitute with an active substitution for it today). Admins may mark any section.
+    @PreAuthorize(AppRoles.ANY_TEACHER)
     public ResponseEntity<ApiResponse<AttendanceSubmitResponse>> submitAttendance(
         @PathVariable UUID tenantId,
         @PathVariable UUID sectionId,
