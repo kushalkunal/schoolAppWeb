@@ -456,7 +456,7 @@ export default function SchedulePage() {
                     </td>
                     <td className="px-4 py-2 text-right">
                       {!c.attendanceSubmitted && (
-                        <Link href={`/tenants/${tenantId}/attendance`} className="text-primary text-xs font-medium hover:underline">
+                        <Link href={`/tenants/${tenantId}/attendance/${c.sectionId}`} className="text-primary text-xs font-medium hover:underline">
                           Take attendance →
                         </Link>
                       )}

@@ -10,7 +10,7 @@ import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/Card';
 import { ErrorBanner } from '@/components/ui/ErrorBanner';
 import { Spinner } from '@/components/ui/Spinner';
 import { Button } from '@/components/ui/Button';
-import { ATTENDANCE_WRITER, useHasRole } from '@/auth/RequireRole';
+import { ANY_TEACHER, useHasRole } from '@/auth/RequireRole';
 import { useAuth } from '@/auth/AuthProvider';
 import { todayIso } from '@/lib/utils';
 import type { AttendanceEntry, AttendanceStatus, StudentResponse } from '@/types/domain';
@@ -30,7 +30,9 @@ export default function SectionAttendancePage() {
   const tenantId = typeof params.tenantId === 'string' ? params.tenantId : '';
   const sectionId = typeof params.sectionId === 'string' ? params.sectionId : '';
   const date = searchParams.get('date') ?? todayIso();
-  const canMark = useHasRole(...ATTENDANCE_WRITER);
+  // Any teacher may see the marking UI; the backend authorizes the specific section (class teacher
+  // or a substitute with an active substitution for it today). Unauthorized submits get a clear 403.
+  const canMark = useHasRole(...ANY_TEACHER);
   const { state } = useAuth();
   const isPrincipal =
     state.status === 'authenticated' &&
