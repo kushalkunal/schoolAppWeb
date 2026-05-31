@@ -21,7 +21,8 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { ErrorBanner } from '@/components/ui/ErrorBanner';
 import { useToast } from '@/components/ui/Toast';
 import { hasCode, isApiError } from '@/api/errors';
-import { ANY_TEACHER, RequireRole } from '@/auth/RequireRole';
+import { ANY_TEACHER, OWNER_OR_ADMIN, RequireRole } from '@/auth/RequireRole';
+import Link from 'next/link';
 import { useAuth } from '@/auth/AuthProvider';
 import { timetableApi } from '@/api/endpoints/timetable';
 import { cn } from '@/lib/utils';
@@ -130,15 +131,23 @@ export default function HomeworkPage() {
         description="Assignments and submissions, grouped by section"
         icon={<BookText size={18} />}
         actions={
-          <RequireRole roles={ANY_TEACHER}>
-            {isTeacher && todaySectionIds !== null && todaySectionIds.size === 0 ? (
-              <span className="text-xs text-slate-400 italic">No classes scheduled for today</span>
-            ) : (
-              <Button onClick={() => setCreateOpen(true)}>
-                <Plus size={14} /> Assign homework
-              </Button>
-            )}
-          </RequireRole>
+          <div className="flex items-center gap-2">
+            <RequireRole roles={OWNER_OR_ADMIN}>
+              <Link href={`/tenants/${tenantId}/homework/log`}
+                className="text-sm font-medium text-primary hover:underline whitespace-nowrap">
+                Homework Log
+              </Link>
+            </RequireRole>
+            <RequireRole roles={ANY_TEACHER}>
+              {isTeacher && todaySectionIds !== null && todaySectionIds.size === 0 ? (
+                <span className="text-xs text-slate-400 italic">No classes scheduled for today</span>
+              ) : (
+                <Button onClick={() => setCreateOpen(true)}>
+                  <Plus size={14} /> Assign homework
+                </Button>
+              )}
+            </RequireRole>
+          </div>
         }
       />
 

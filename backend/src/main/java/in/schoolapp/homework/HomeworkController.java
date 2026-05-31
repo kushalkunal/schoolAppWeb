@@ -44,6 +44,18 @@ public class HomeworkController {
             : service.listForSection(tenantId, sectionId));
     }
 
+    /** Admin homework log: who assigned what, to which class, on which day. Defaults to last 30 days. */
+    @GetMapping("/log")
+    @PreAuthorize(AppRoles.OWNER_OR_ADMIN)
+    public ApiResponse<List<in.schoolapp.homework.dto.HomeworkLogRow>> log(
+        @PathVariable UUID tenantId,
+        @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate from,
+        @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate to) {
+        java.time.LocalDate t = java.time.LocalDate.now();
+        return ApiResponse.success(service.homeworkLog(tenantId,
+            from == null ? t.minusDays(30) : from, to == null ? t : to));
+    }
+
     @DeleteMapping("/assignments/{assignmentId}")
     @PreAuthorize(AppRoles.ANY_TEACHER)
     public ApiResponse<Void> delete(@PathVariable UUID tenantId, @PathVariable UUID assignmentId) {

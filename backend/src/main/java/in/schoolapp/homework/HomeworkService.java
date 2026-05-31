@@ -38,25 +38,26 @@ public class HomeworkService {
     private final ParentNotificationService parentNotificationService;
     private final ClassSectionService classSectionService;
     private final TeacherSubjectAssignmentRepository teacherAssignmentRepository;
+    private final in.schoolapp.timetable.repository.TimetableEntryRepository timetableEntryRepository;
+    private final in.schoolapp.timetable.repository.TimetableSubstitutionRepository substitutionRepository;
+    private final in.schoolapp.school.repository.StaffRepository staffRepository;
+    private final in.schoolapp.academics.repository.SubjectRepository subjectRepository;
 
     // ---------- Assignments ----------
 
     @Transactional
     public AssignmentDto createAssignment(UUID tenantId, AssignmentDto req) {
-        // RBAC: a SUBJECT_TEACHER may only assign homework for sections+subjects they teach.
-        // CLASS_TEACHER, PRINCIPAL, ADMIN, SCHOOL_OWNER are unrestricted.
+        // RBAC: a teacher may assign homework only to a section they actually teach — whether as a
+        // regular teacher (class teacher of it, or a subject/timetable assignment there) or as a
+        // substitute with an active substitution for it today. PRINCIPAL/ADMIN/SCHOOL_OWNER are
+        // unrestricted. Every assignment records who created it + when (the homework history).
         String role = TenantContext.getRole();
-        if ("SUBJECT_TEACHER".equals(role)) {
+        boolean isAdmin = "PRINCIPAL".equals(role) || "ADMIN".equals(role) || "SCHOOL_OWNER".equals(role);
+        if (!isAdmin) {
             var section = classSectionService.getSectionOrThrow(tenantId, req.sectionId());
-            boolean isAssigned = teacherAssignmentRepository
-                .existsByStaffIdAndSubjectIdAndSectionIdAndAcademicYearId(
-                    TenantContext.getStaffId(),
-                    req.subjectId(),
-                    req.sectionId(),
-                    section.getAcademicYearId());
-            if (!isAssigned) {
+            if (!teachesSection(tenantId, TenantContext.getStaffId(), req.sectionId(), section)) {
                 throw new AppException(ErrorCode.FORBIDDEN,
-                    "You can only assign homework for subjects you are assigned to teach in this section.");
+                    "You can only assign homework to a class you teach (or are substituting for today).");
             }
         }
 
@@ -71,6 +72,23 @@ public class HomeworkService {
         HomeworkAssignment saved = assignmentRepo.save(a);
         notifyParentsOfHomework(tenantId, saved);
         return AssignmentDto.from(saved);
+    }
+
+    /** True when the teacher teaches the section: class teacher of it, a subject/timetable
+     *  assignment there, or an active substitution for it today. */
+    private boolean teachesSection(UUID tenantId, UUID staffId, UUID sectionId,
+                                   in.schoolapp.school.entity.Section section) {
+        if (staffId == null) return false;
+        if (staffId.equals(section.getClassTeacherId())) return true;
+        boolean assignedSubject = teacherAssignmentRepository
+            .findByStaffIdAndAcademicYearId(staffId, section.getAcademicYearId()).stream()
+            .anyMatch(a -> sectionId.equals(a.getSectionId()));
+        if (assignedSubject) return true;
+        boolean inTimetable = timetableEntryRepository.findByTeacherId(staffId).stream()
+            .anyMatch(e -> sectionId.equals(e.getSectionId()) && tenantId.equals(e.getSchoolId()));
+        if (inTimetable) return true;
+        return substitutionRepository.findBySubstituteTeacherIdAndDate(staffId, java.time.LocalDate.now()).stream()
+            .anyMatch(s -> sectionId.equals(s.getSectionId()) && tenantId.equals(s.getSchoolId()));
     }
 
     /**
@@ -109,6 +127,34 @@ public class HomeworkService {
     public List<AssignmentDto> listForTenant(UUID tenantId) {
         return assignmentRepo.findBySchoolIdOrderByCreatedAtDesc(tenantId).stream()
             .map(AssignmentDto::from).toList();
+    }
+
+    /** Admin homework log: who assigned which homework, to which class, on which day (history). */
+    @Transactional(readOnly = true)
+    public List<in.schoolapp.homework.dto.HomeworkLogRow> homeworkLog(
+            UUID tenantId, java.time.LocalDate from, java.time.LocalDate to) {
+        java.util.Map<UUID, String> staffName = staffRepository
+            .findBySchoolIdAndActiveTrueOrderByFirstName(tenantId).stream()
+            .collect(java.util.stream.Collectors.toMap(s -> s.getId(), s -> s.displayName(), (a, b) -> a));
+        java.util.Map<UUID, String> subjectName = subjectRepository.findBySchoolIdOrderByName(tenantId).stream()
+            .collect(java.util.stream.Collectors.toMap(s -> s.getId(), s -> s.getName(), (a, b) -> a));
+        java.util.Map<UUID, String> sectionLabel = new java.util.HashMap<>();
+        for (var c : classSectionService.listClasses(tenantId)) {
+            for (var sec : c.sections()) sectionLabel.put(sec.id(), c.name() + " - " + sec.name());
+        }
+        return assignmentRepo.findBySchoolIdOrderByCreatedAtDesc(tenantId).stream()
+            .filter(a -> {
+                java.time.LocalDate d = a.getCreatedAt().toLocalDate();
+                return !d.isBefore(from) && !d.isAfter(to);
+            })
+            .map(a -> new in.schoolapp.homework.dto.HomeworkLogRow(
+                a.getCreatedAt().toLocalDate(),
+                a.getCreatedByStaffId() != null ? staffName.getOrDefault(a.getCreatedByStaffId(), "—") : "—",
+                sectionLabel.getOrDefault(a.getSectionId(), "—"),
+                a.getSubjectId() != null ? subjectName.getOrDefault(a.getSubjectId(), "—") : "—",
+                a.getTitle(),
+                a.getDueDate()))
+            .toList();
     }
 
     @Transactional

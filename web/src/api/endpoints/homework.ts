@@ -33,7 +33,20 @@ export interface CreateAssignmentRequest {
   dueDate?: string;
 }
 
+export interface HomeworkLogRow {
+  assignedOn: string;
+  teacherName: string;
+  sectionLabel: string;
+  subjectName: string;
+  title: string;
+  dueDate: string | null;
+}
+
 export const homeworkApi = {
+  /** Admin homework log: who assigned what, to which class, on which day. */
+  log(tenantId: string, from?: string, to?: string): Promise<HomeworkLogRow[]> {
+    return apiGet(`/api/v1/tenants/${tenantId}/homework/log`, { ...(from ? { from } : {}), ...(to ? { to } : {}) });
+  },
   listAssignments(tenantId: string, sectionId?: string): Promise<AssignmentDto[]> {
     const qs = sectionId ? `?sectionId=${sectionId}` : '';
     return apiGet(`/api/v1/tenants/${tenantId}/homework/assignments${qs}`);
