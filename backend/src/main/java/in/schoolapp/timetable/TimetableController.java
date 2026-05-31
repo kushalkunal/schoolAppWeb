@@ -3,6 +3,7 @@ package in.schoolapp.timetable;
 import in.schoolapp.auth.AppRoles;
 import in.schoolapp.common.ApiResponse;
 import in.schoolapp.timetable.dto.PeriodDto;
+import in.schoolapp.timetable.dto.SubstituteCandidatesResponse;
 import in.schoolapp.timetable.dto.SubstitutionDto;
 import in.schoolapp.timetable.dto.TimetableEntryDto;
 import in.schoolapp.common.TenantContext;
@@ -137,5 +138,22 @@ public class TimetableController {
     ) {
         return ApiResponse.success(
             service.listSubstitutionsForDate(tenantId, date == null ? LocalDate.now() : date));
+    }
+
+    /**
+     * Availability-aware substitute picker for one period on one date: returns teachers split
+     * into absent-today / free-at-this-slot / busy-at-this-slot, so the UI can suggest the right
+     * substitute instead of listing everyone blindly.
+     */
+    @GetMapping("/substitute-candidates")
+    @PreAuthorize(AppRoles.OWNER_OR_ADMIN)
+    public ApiResponse<SubstituteCandidatesResponse> substituteCandidates(
+        @PathVariable UUID tenantId,
+        @RequestParam UUID periodId,
+        @RequestParam(required = false) UUID sectionId,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date
+    ) {
+        return ApiResponse.success(service.getSubstituteCandidates(
+            tenantId, date == null ? LocalDate.now() : date, periodId, sectionId));
     }
 }

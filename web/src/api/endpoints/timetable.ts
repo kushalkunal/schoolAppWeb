@@ -8,6 +8,18 @@ import type {
   UpsertTimetableEntryRequest,
 } from '@/types/domain';
 
+export interface SubstituteCandidate {
+  staffId: string;
+  name: string;
+  role: string;
+  note: string;
+}
+export interface SubstituteCandidatesResponse {
+  absent: SubstituteCandidate[];
+  available: SubstituteCandidate[];
+  busy: SubstituteCandidate[];
+}
+
 export const timetableApi = {
   listPeriods(tenantId: string): Promise<PeriodResponse[]> {
     return apiGet(`/api/v1/tenants/${tenantId}/timetable/periods`);
@@ -41,5 +53,15 @@ export const timetableApi = {
   /** List all substitutions for a given date (admin view). Defaults to today. */
   listSubstitutions(tenantId: string, date?: string): Promise<SubstitutionResponse[]> {
     return apiGet(`/api/v1/tenants/${tenantId}/timetable/substitutions`, date ? { date } : {});
+  },
+  /**
+   * Availability-aware substitute picker for one period on one date: teachers split into
+   * absent-today / free-at-this-slot / busy-at-this-slot.
+   */
+  getSubstituteCandidates(
+    tenantId: string,
+    params: { periodId: string; date?: string; sectionId?: string },
+  ): Promise<SubstituteCandidatesResponse> {
+    return apiGet(`/api/v1/tenants/${tenantId}/timetable/substitute-candidates`, params);
   },
 };

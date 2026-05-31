@@ -73,6 +73,19 @@ function AssignSubDialog({ tenantId, periods, staff, absentStaff, sectionOptions
 
   const [form, setForm] = useState<Partial<AssignSubstitutionRequest>>({ date: todayStr() });
 
+  // Availability-aware candidates for the chosen date + period (+ section). Tells us who is
+  // absent today, who is free at this exact slot, and who is already busy teaching it.
+  const candidatesQ = useQuery({
+    queryKey: ['sub-candidates', tenantId, form.date, form.periodId, form.sectionId],
+    queryFn: () => timetableApi.getSubstituteCandidates(tenantId, {
+      periodId: form.periodId!,
+      date: form.date,
+      sectionId: form.sectionId,
+    }),
+    enabled: !!form.periodId && !!form.date,
+  });
+  const candidates = candidatesQ.data;
+
   const mutation = useMutation({
     mutationFn: (req: AssignSubstitutionRequest) => timetableApi.assignSubstitution(tenantId, req),
     onSuccess: () => {
@@ -154,23 +167,28 @@ function AssignSubDialog({ tenantId, periods, staff, absentStaff, sectionOptions
           }
         >
           <option value="">— Not specified —</option>
-          {absentStaff.length > 0
-            ? absentStaff.map((s) => (
-                <option key={s.id} value={s.id}>{s.displayName}</option>
+          {/* Prefer the server's "absent today" list; fall back to the client heuristic, then all staff. */}
+          {candidates && candidates.absent.length > 0
+            ? candidates.absent.map((c) => (
+                <option key={c.staffId} value={c.staffId}>{c.name}</option>
               ))
-            : staff.map((s) => (
-                <option key={s.id} value={s.id}>{s.displayName}</option>
-              ))
+            : absentStaff.length > 0
+              ? absentStaff.map((s) => (
+                  <option key={s.id} value={s.id}>{s.displayName}</option>
+                ))
+              : staff.map((s) => (
+                  <option key={s.id} value={s.id}>{s.displayName}</option>
+                ))
           }
         </select>
-        {absentStaff.length > 0 && (
-          <p className="text-xs text-slate-400">
-            Showing {absentStaff.length} teacher{absentStaff.length !== 1 ? 's' : ''} who haven’t marked attendance as present today.
+        {candidates && candidates.absent.length > 0 && (
+          <p className="text-xs text-amber-600">
+            {candidates.absent.length} teacher{candidates.absent.length !== 1 ? 's' : ''} marked absent / on leave today.
           </p>
         )}
       </div>
 
-      {/* Substitute teacher */}
+      {/* Substitute teacher — availability-aware once a date + period are chosen */}
       <div className="space-y-1">
         <label className="text-sm font-medium text-slate-700">Substitute teacher</label>
         <select
@@ -180,10 +198,35 @@ function AssignSubDialog({ tenantId, periods, staff, absentStaff, sectionOptions
           required
         >
           <option value="">Select substitute teacher</option>
-          {staff.map((s) => (
-            <option key={s.id} value={s.id}>{s.displayName}</option>
-          ))}
+          {candidates ? (
+            <>
+              <optgroup label={`Free this period (${candidates.available.length})`}>
+                {candidates.available.map((c) => (
+                  <option key={c.staffId} value={c.staffId}>{c.name}</option>
+                ))}
+              </optgroup>
+              {candidates.busy.length > 0 && (
+                <optgroup label="Busy this period">
+                  {candidates.busy.map((c) => (
+                    <option key={c.staffId} value={c.staffId} disabled>
+                      {c.name} — {c.note}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </>
+          ) : (
+            staff.map((s) => (
+              <option key={s.id} value={s.id}>{s.displayName}</option>
+            ))
+          )}
         </select>
+        {!form.periodId && (
+          <p className="text-xs text-slate-400">Pick a date and period to see which teachers are free.</p>
+        )}
+        {candidates && candidates.available.length === 0 && (
+          <p className="text-xs text-red-500">No teacher is free this period — everyone is teaching or absent.</p>
+        )}
       </div>
 
       {/* Reason */}

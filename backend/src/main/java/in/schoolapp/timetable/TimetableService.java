@@ -2,7 +2,13 @@ package in.schoolapp.timetable;
 
 import in.schoolapp.common.AppException;
 import in.schoolapp.common.ErrorCode;
+import in.schoolapp.hr.entity.StaffAttendance;
+import in.schoolapp.hr.repository.StaffAttendanceRepository;
+import in.schoolapp.school.entity.Staff;
+import in.schoolapp.school.entity.StaffRole;
+import in.schoolapp.school.repository.StaffRepository;
 import in.schoolapp.timetable.dto.PeriodDto;
+import in.schoolapp.timetable.dto.SubstituteCandidatesResponse;
 import in.schoolapp.timetable.dto.SubstitutionDto;
 import in.schoolapp.timetable.dto.TimetableEntryDto;
 import in.schoolapp.timetable.entity.TimetableEntry;
@@ -18,8 +24,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -29,6 +40,16 @@ public class TimetableService {
     private final TimetablePeriodRepository periodRepository;
     private final TimetableEntryRepository entryRepository;
     private final TimetableSubstitutionRepository substitutionRepository;
+    private final StaffRepository staffRepository;
+    private final StaffAttendanceRepository staffAttendanceRepository;
+
+    /** Roles that can stand in for an absent teacher. */
+    private static final Set<StaffRole> TEACHING_ROLES =
+        EnumSet.of(StaffRole.CLASS_TEACHER, StaffRole.SUBJECT_TEACHER, StaffRole.PRINCIPAL);
+    /** Staff-attendance states that mean the teacher is unavailable today. */
+    private static final Set<StaffAttendance.StaffAttendanceStatus> ABSENT_STATES =
+        EnumSet.of(StaffAttendance.StaffAttendanceStatus.ABSENT,
+                   StaffAttendance.StaffAttendanceStatus.LEAVE);
 
     // ---------- Periods ----------
 
@@ -219,5 +240,62 @@ public class TimetableService {
     public List<SubstitutionDto> listSubstitutionsForDate(UUID tenantId, LocalDate date) {
         return substitutionRepository.findByDateAndSchoolId(date, tenantId).stream()
             .map(SubstitutionDto::from).toList();
+    }
+
+    /**
+     * Decision-support for assigning a substitute to one period on one date. Splits teaching
+     * staff into: absent today (candidates to replace), free at this slot (best substitutes),
+     * and busy at this slot (already teaching/substituting). This turns the previously-blind
+     * "pick any teacher" dropdown into an availability-aware picker.
+     *
+     * @param sectionId optional — the section being covered; a teacher already teaching THIS
+     *                  section at this slot is the one being replaced, not "busy elsewhere".
+     */
+    @Transactional(readOnly = true)
+    public SubstituteCandidatesResponse getSubstituteCandidates(
+            UUID tenantId, LocalDate date, UUID periodId, UUID sectionId) {
+        int dow = date.getDayOfWeek().getValue();
+
+        // Who is unavailable today (marked ABSENT or on LEAVE).
+        Set<UUID> absentIds = staffAttendanceRepository
+            .findBySchoolIdAndAttendanceDate(tenantId, date).stream()
+            .filter(a -> ABSENT_STATES.contains(a.getStatus()))
+            .map(StaffAttendance::getStaffId)
+            .collect(Collectors.toSet());
+
+        // Who is teaching some OTHER section at this period today (regular timetable).
+        Map<UUID, UUID> busyTeacherToSection = entryRepository.findByPeriodIdAndDayOfWeek(periodId, dow).stream()
+            .filter(e -> tenantId.equals(e.getSchoolId()) && e.getTeacherId() != null
+                && !e.getSectionId().equals(sectionId))
+            .collect(Collectors.toMap(TimetableEntry::getTeacherId, TimetableEntry::getSectionId, (a, b) -> a));
+
+        // Who is already covering another section as a substitute at this period today.
+        Set<UUID> substitutingIds = substitutionRepository.findByDateAndSchoolId(date, tenantId).stream()
+            .filter(s -> s.getPeriodId().equals(periodId) && !s.getSectionId().equals(sectionId))
+            .map(TimetableSubstitution::getSubstituteTeacherId)
+            .collect(Collectors.toSet());
+
+        List<SubstituteCandidatesResponse.Candidate> absent = new ArrayList<>();
+        List<SubstituteCandidatesResponse.Candidate> available = new ArrayList<>();
+        List<SubstituteCandidatesResponse.Candidate> busy = new ArrayList<>();
+
+        for (Staff s : staffRepository.findBySchoolIdAndActiveTrueOrderByFirstName(tenantId)) {
+            if (!TEACHING_ROLES.contains(s.getRole())) continue;
+            String role = s.getRole().name();
+            if (absentIds.contains(s.getId())) {
+                absent.add(candidate(s, role, "Marked absent today"));
+            } else if (busyTeacherToSection.containsKey(s.getId())) {
+                busy.add(candidate(s, role, "Teaching another class this period"));
+            } else if (substitutingIds.contains(s.getId())) {
+                busy.add(candidate(s, role, "Already substituting this period"));
+            } else {
+                available.add(candidate(s, role, "Free this period"));
+            }
+        }
+        return new SubstituteCandidatesResponse(absent, available, busy);
+    }
+
+    private static SubstituteCandidatesResponse.Candidate candidate(Staff s, String role, String note) {
+        return new SubstituteCandidatesResponse.Candidate(s.getId(), s.displayName(), role, note);
     }
 }
