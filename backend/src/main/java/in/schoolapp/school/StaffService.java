@@ -50,6 +50,7 @@ public class StaffService {
     private final PasswordEncoder passwordEncoder;
     private final EmailSender emailSender;
     private final LeaveBalanceRepository leaveBalanceRepository;
+    private final ClassSectionService classSectionService;
 
     /**
      * Default leave entitlements seeded for every new staff member.
@@ -147,6 +148,8 @@ public class StaffService {
         staff.setEmail(email);
         staff.setPhone(blankToNull(req.phone()));
         staff.setRole(req.role());
+        staff.setGender(blankToNull(req.gender()));
+        staff.setDateOfJoining(req.dateOfJoining());
         staff.setActive(true);
         staff.setIdentifierVerified(true);           // email supplied by admin → trusted
         staff.setIdentifierVerifiedAt(OffsetDateTime.now());
@@ -163,6 +166,11 @@ public class StaffService {
             "firstName", staff.getFirstName(),
             "inviteFlow", "email"
         ));
+
+        // One-step registration: optionally make the new teacher a class teacher right away.
+        if (req.classTeacherSectionId() != null && req.role() == StaffRole.CLASS_TEACHER) {
+            classSectionService.assignClassTeacher(schoolId, req.classTeacherSectionId(), staff.getId());
+        }
 
         sendTeacherInviteEmail(staff, tempPassword, schoolId);
         return StaffResponse.from(staff);

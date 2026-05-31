@@ -107,6 +107,9 @@ export interface InviteTeacherRequest {
   email: string;
   phone?: string;
   role: 'CLASS_TEACHER' | 'SUBJECT_TEACHER' | 'LIBRARIAN';
+  gender?: string;
+  dateOfJoining?: string;
+  classTeacherSectionId?: string;
 }
 
 // ---------- Student ----------

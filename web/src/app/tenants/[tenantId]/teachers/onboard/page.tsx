@@ -451,6 +451,16 @@ function InviteTeacherModal({
   });
   const [success, setSuccess] = useState(false);
 
+  // Sections (flattened) for the optional one-step class-teacher assignment.
+  const classesQ = useQuery({
+    queryKey: ['classes', tenantId],
+    queryFn: () => schoolApi.listClasses(tenantId),
+    enabled: open,
+    staleTime: 5 * 60_000,
+  });
+  const sectionOptions = (classesQ.data ?? []).flatMap((c) =>
+    c.sections.map((s) => ({ id: s.id, label: `${c.name} - ${s.name}` })));
+
   const invite = useMutation({
     mutationFn: () => schoolApi.inviteTeacher(tenantId, form),
     onSuccess: () => {
@@ -530,6 +540,44 @@ function InviteTeacherModal({
               ))}
             </select>
           </label>
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="text-sm text-slate-700 mb-1 inline-block">Gender (optional)</span>
+              <select
+                value={form.gender ?? ''}
+                onChange={(e) => setForm({ ...form, gender: e.target.value })}
+                className="block w-full rounded border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option value="">— select —</option>
+                {GENDERS.map((g) => (
+                  <option key={g} value={g}>{g.charAt(0) + g.slice(1).toLowerCase()}</option>
+                ))}
+              </select>
+            </label>
+            <Input
+              label="Date of joining (optional)"
+              type="date"
+              value={form.dateOfJoining ?? ''}
+              onChange={(e) => setForm({ ...form, dateOfJoining: e.target.value })}
+            />
+          </div>
+
+          {form.role === 'CLASS_TEACHER' && sectionOptions.length > 0 && (
+            <label className="block">
+              <span className="text-sm text-slate-700 mb-1 inline-block">Class teacher of (optional)</span>
+              <select
+                value={form.classTeacherSectionId ?? ''}
+                onChange={(e) => setForm({ ...form, classTeacherSectionId: e.target.value || undefined })}
+                className="block w-full rounded border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option value="">— not assigned —</option>
+                {sectionOptions.map((s) => (
+                  <option key={s.id} value={s.id}>{s.label}</option>
+                ))}
+              </select>
+            </label>
+          )}
 
           <p className="text-xs text-slate-500 bg-slate-50 rounded px-3 py-2">
             A temporary password will be generated and emailed to the teacher. They must change it on first login.
