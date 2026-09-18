@@ -1,7 +1,7 @@
 {
-  "name": "Scalio Edu",
-  "short_name": "Scalio Edu",
-  "description": "School management — attendance, fees, academics. Powered by Scalio Edu.",
+  "name": "ScalioCampus",
+  "short_name": "ScalioCampus",
+  "description": "School management — attendance, fees, academics. Powered by ScalioLab.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

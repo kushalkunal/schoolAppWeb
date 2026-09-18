@@ -363,7 +363,11 @@ function AppShell({ children }: { children: React.ReactNode }) {
             </button>
           </div>
           {/* Platform attribution — small + unobtrusive; the school's brand leads above. */}
-          <p className="mt-2 text-center text-[10px] text-slate-400">{PLATFORM.poweredBy}</p>
+          <p className="mt-2 text-center text-[10px] text-slate-400">
+            <a href={PLATFORM.poweredByUrl} target="_blank" rel="noopener noreferrer" className="underline decoration-slate-300 underline-offset-2 hover:text-slate-600">
+              {PLATFORM.poweredBy}
+            </a>
+          </p>
         </div>
       </aside>
 

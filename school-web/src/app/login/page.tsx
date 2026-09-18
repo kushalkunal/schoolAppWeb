@@ -104,19 +104,32 @@ function LoginInner() {
     <main className="min-h-dvh flex bg-white">
       {/* â”€â”€ LEFT brand panel (desktop) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <aside
-        className="relative hidden lg:flex lg:w-1/2 flex-col justify-between overflow-hidden p-12 text-white"
-        style={{ background: 'linear-gradient(150deg, var(--brand-primary) 0%, #7d0000 55%, #4a0000 100%)' }}
+        className="relative hidden lg:flex lg:w-[52%] flex-col justify-between overflow-hidden px-12 py-10 text-white"
+        style={{ background: 'radial-gradient(circle at top left, rgba(255,255,255,0.12), transparent 28%), linear-gradient(135deg, #bf112f 0%, #9d0017 38%, #7a000d 100%)' }}
       >
-        <div aria-hidden className="pointer-events-none absolute inset-0 opacity-[0.07]"
-          style={{ backgroundImage: 'linear-gradient(white 1px,transparent 1px),linear-gradient(90deg,white 1px,transparent 1px)', backgroundSize: '44px 44px' }} />
+        <div aria-hidden className="pointer-events-none absolute inset-0 opacity-[0.12]"
+          style={{ backgroundImage: 'linear-gradient(white 1px,transparent 1px),linear-gradient(90deg,white 1px,transparent 1px)', backgroundSize: '42px 42px' }} />
         <div aria-hidden className="pointer-events-none absolute -top-24 -left-24 h-96 w-96 rounded-full bg-white/10 blur-3xl" />
         <div aria-hidden className="pointer-events-none absolute -bottom-24 -right-16 h-80 w-80 rounded-full bg-white/10 blur-3xl" />
 
-        <div className="relative z-10 flex items-center gap-3">
-          <div className="h-11 w-11 rounded-2xl bg-white grid place-items-center shadow-lg p-1.5">
+        <div className="relative z-10 flex items-center gap-4">
+          <div className="h-14 w-14 rounded-[18px] bg-white/95 grid place-items-center shadow-[0_18px_40px_rgba(0,0,0,0.18)] p-2 ring-1 ring-white/60">
             <img src="/brand/logo.svg" alt={`${PLATFORM.name} logo`} className="h-full w-full object-contain" />
           </div>
-          <span className="font-extrabold text-2xl tracking-tight">{PLATFORM.name}</span>
+          <div className="flex flex-col">
+            <div className="flex items-baseline gap-1 text-[2.1rem] font-black leading-none tracking-[-0.08em]">
+              <span className="text-white">Scalio</span>
+              <span className="text-red-100/80">Campus</span>
+            </div>
+            <a
+              href={PLATFORM.poweredByUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-1 text-[11px] font-medium text-red-100/90 underline decoration-red-100/60 underline-offset-2 hover:text-white"
+            >
+              Powered by ScalioLab
+            </a>
+          </div>
         </div>
 
         <div className="relative z-10 max-w-md">
@@ -139,21 +152,37 @@ function LoginInner() {
           </ul>
         </div>
 
-        <p className="relative z-10 text-xs text-white/50">
-          {PLATFORM.poweredBy} &middot; &copy; {year} {PLATFORM.company}
+        <p className="relative z-10 text-xs text-red-100/80">
+          <a href={PLATFORM.poweredByUrl} target="_blank" rel="noopener noreferrer" className="underline decoration-red-100/60 underline-offset-2 hover:text-white">
+            {PLATFORM.poweredBy}
+          </a>
+          {' '}&middot; &copy; {year} {PLATFORM.company}
         </p>
       </aside>
 
       {/* â”€â”€ RIGHT form column â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="flex-1 flex flex-col min-h-dvh">
         <div className="flex-1 flex items-center justify-center px-5 py-10">
-          <div className="w-full max-w-sm">
+          <div className="w-full max-w-[420px] rounded-[28px] border border-slate-200 bg-white/85 p-7 shadow-[0_30px_80px_rgba(15,23,42,0.12)] backdrop-blur-sm lg:bg-white lg:p-8">
             {/* Compact brand header — shown when the left panel is hidden */}
-            <div className="mb-8 flex items-center gap-2.5 lg:hidden">
-              <div className="h-10 w-10 rounded-xl bg-primary grid place-items-center shadow p-1.5">
+            <div className="mb-8 flex items-center gap-3 lg:hidden">
+              <div className="h-11 w-11 rounded-xl bg-primary grid place-items-center shadow-lg shadow-red-200 p-1.5">
                 <img src="/brand/logo.svg" alt={`${PLATFORM.name} logo`} className="h-full w-full object-contain" />
               </div>
-              <span className="font-extrabold text-xl tracking-tight text-slate-900">{PLATFORM.name}</span>
+              <div className="flex flex-col leading-none">
+                <div className="flex items-baseline gap-1 text-xl font-black tracking-[-0.07em]">
+                  <span className="text-primary">Scalio</span>
+                  <span className="text-slate-900">Campus</span>
+                </div>
+                <a
+                  href={PLATFORM.poweredByUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1 text-[10px] font-medium text-slate-500 underline decoration-slate-300 underline-offset-2 hover:text-slate-700"
+                >
+                  Powered by ScalioLab
+                </a>
+              </div>
             </div>
 
           {/* Heading */}
@@ -325,7 +354,10 @@ function LoginInner() {
         </div>
         {/* Mobile footer attribution — the left brand panel carries this on desktop */}
         <p className="lg:hidden pb-6 text-center text-[11px] text-slate-400">
-          {PLATFORM.poweredBy} &middot; &copy; {year} {PLATFORM.company}
+          <a href={PLATFORM.poweredByUrl} target="_blank" rel="noopener noreferrer" className="underline decoration-slate-300 underline-offset-2 hover:text-slate-600">
+            {PLATFORM.poweredBy}
+          </a>
+          {' '}&middot; &copy; {year} {PLATFORM.company}
         </p>
       </div>
     </main>
