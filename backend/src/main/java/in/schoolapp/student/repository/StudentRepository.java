@@ -24,6 +24,9 @@ public interface StudentRepository extends JpaRepository<Student, UUID> {
 
     boolean existsBySchoolIdAndAdmissionNumber(UUID schoolId, String admissionNumber);
 
+    /** Resolve a student by their admission number within a school — used by CSV importers. */
+    Optional<Student> findBySchoolIdAndAdmissionNumber(UUID schoolId, String admissionNumber);
+
     /**
      * Fuzzy name search using the {@code idx_students_name_trgm} GIN index from V1 — matches
      * substrings in first_name + last_name and the admission number prefix. Used by the student

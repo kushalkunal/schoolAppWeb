@@ -225,6 +225,15 @@ export default function AttendanceHomePage() {
     staleTime: 60_000,
   });
 
+  // A7: a class teacher who owns exactly one section shouldn't have to tap through an
+  // intermediate list — jump straight to the marker. Multi-section teachers still choose below.
+  const autoRedirecting = isClassTeacher && mineSections.data?.length === 1;
+  useEffect(() => {
+    if (autoRedirecting && mineSections.data) {
+      router.replace(`/tenants/${tenantId}/attendance/${mineSections.data[0]!.id}?date=${date}`);
+    }
+  }, [autoRedirecting, mineSections.data, tenantId, date, router]);
+
   // ── Admin state ──
   const [takenFilter, setTakenFilter] = useState('');  // classId filter for "taken" list
   const [selectedSection, setSelectedSection] = useState<{ id: string; label: string } | null>(null);
@@ -406,14 +415,14 @@ export default function AttendanceHomePage() {
         <Card>
           <CardHeader><CardTitle>My sections</CardTitle></CardHeader>
           <CardBody>
-            {mineSections.isLoading && <Spinner />}
+            {(mineSections.isLoading || autoRedirecting) && <Spinner />}
             {mineSections.isError && <ErrorBanner error={mineSections.error} onRetry={() => mineSections.refetch()} />}
             {mineSections.data?.length === 0 && (
               <p className="text-sm text-slate-500">
                 No sections assigned yet. Ask your admin from <strong>Settings → Classes</strong>.
               </p>
             )}
-            {mineSections.data && mineSections.data.length > 0 && (
+            {!autoRedirecting && mineSections.data && mineSections.data.length > 0 && (
               <ul className="space-y-2 text-sm">
                 {mineSections.data.map((s: SectionResponse) => (
                   <li key={s.id} className="flex justify-between items-center border-b border-slate-100 pb-2 last:border-b-0">

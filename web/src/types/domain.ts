@@ -349,6 +349,8 @@ export interface PaymentResponse {
   paymentDate: string;
   outstandingBalancePaise: number;
   createdAt: string;
+  collectedById: string | null;
+  collectedByName: string | null;
 }
 
 export interface FeeDashboardResponse {
@@ -371,6 +373,8 @@ export interface InvoiceResponse {
   status: 'PENDING' | 'PARTIAL' | 'PAID' | 'WAIVED';
   openingBalance: boolean;
   description: string | null;
+  academicYearId: string | null;
+  termNumber: number | null;
 }
 
 export interface StudentFeeSummaryResponse {
@@ -390,6 +394,7 @@ export interface RecentPaymentRow {
   receiptNumber: string;
   receiptPdfUrl: string | null;
   paymentDate: string;
+  collectedByName: string | null;
 }
 
 export interface ClassCollectionRow {
@@ -444,7 +449,7 @@ export type ExamType =
   | 'UNIT_TEST' | 'MID_TERM' | 'FINAL_EXAM' | 'TERM' | 'ANNUAL'
   | 'MOCK' | 'ACTIVITY' | 'PRACTICAL' | 'ASSESSMENT' | 'INTERNAL';
 
-export type ResultStatus = 'DRAFT' | 'READY' | 'PUBLISHED';
+export type ResultStatus = 'DRAFT' | 'READY' | 'VERIFIED' | 'PUBLISHED';
 
 export interface SubjectResponse {
   id: string;
@@ -456,6 +461,16 @@ export interface CreateSubjectsRequest {
   subjects: { name: string; code?: string }[];
 }
 
+export type FeePolicy = 'BLOCK' | 'ALLOW' | 'OVERRIDE';
+
+export interface AcademicYearResponse {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  current: boolean;
+}
+
 export interface CreateExamRequest {
   name: string;
   examType: ExamType;
@@ -463,6 +478,9 @@ export interface CreateExamRequest {
   endDate?: string;
   classId?: string;
   sectionId?: string;
+  classIds?: string[];
+  feePolicy?: FeePolicy;
+  academicYearId?: string;
 }
 
 export interface ExamResponse {
@@ -474,8 +492,43 @@ export interface ExamResponse {
   endDate: string | null;
   classId: string | null;
   sectionId: string | null;
+  participatingClassIds: string[];
+  feePolicy: FeePolicy;
   published: boolean;
   resultStatus: ResultStatus;
+}
+
+// ---- Exam schedule (examination timetable) ----
+export interface ExamScheduleRow {
+  subjectId: string;
+  subjectName: string;
+  examDate: string;          // ISO yyyy-MM-dd
+  startTime: string | null;  // HH:mm:ss
+  endTime: string | null;
+}
+
+export interface UpsertScheduleRequest {
+  sittings: {
+    subjectId: string;
+    examDate: string;
+    startTime?: string;
+    endTime?: string;
+  }[];
+}
+
+// ---- Admit-card planning ----
+export interface ExamEnrollmentSummaryResponse {
+  totalStudents: number;
+  classes: { classId: string; className: string; studentCount: number }[];
+}
+
+export interface AdmitCardValidationResponse {
+  ready: boolean;
+  activeStudents: number;
+  hasParticipatingClasses: boolean;
+  hasSubjectsConfigured: boolean;
+  hasSchedule: boolean;
+  warnings: string[];
 }
 
 export interface StudentRow {

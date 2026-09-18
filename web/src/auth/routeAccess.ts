@@ -31,6 +31,12 @@ export const ROLE_AREAS: Record<StaffRole, readonly string[] | typeof ALL> = {
   LIBRARIAN: [
     '/dashboard', '/library', '/schedule', '/circulars', '/hr/attendance', '/hr/leave',
   ],
+  // Front desk: visitor logging, admission enquiries, student lookup, circulars. Writes remain
+  // independently authorized by the backend once the RECEPTIONIST role is issued in the JWT.
+  RECEPTIONIST: [
+    '/dashboard', '/visitors', '/admissions', '/students',
+    '/circulars', '/hr/attendance', '/hr/leave',
+  ],
   // Read-only auditor: dashboards + read views only (writes 403 at the backend anyway).
   VIEWER: ['/dashboard', '/students', '/attendance', '/academics', '/fees/dashboard'],
 };

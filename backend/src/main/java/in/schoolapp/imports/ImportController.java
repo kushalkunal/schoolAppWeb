@@ -41,6 +41,9 @@ public class ImportController {
 
     private final StudentImportService studentImportService;
     private final StaffImportService staffImportService;
+    private final SubjectImportService subjectImportService;
+    private final ClassImportService classImportService;
+    private final FeeOpeningBalanceImportService openingBalanceImportService;
 
     @PostMapping(value = "/students", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize(AppRoles.OWNER_OR_ADMIN)
@@ -66,6 +69,42 @@ public class ImportController {
         var result = staffImportService.importStaff(tenantId, file.getInputStream(), dryRun);
         return ResponseEntity.status(dryRun ? HttpStatus.OK : HttpStatus.CREATED)
             .body(ApiResponse.success(result));
+    }
+
+    @PostMapping(value = "/subjects", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize(AppRoles.OWNER_OR_ADMIN)
+    public ResponseEntity<ApiResponse<ImportResult<String>>> importSubjects(
+        @PathVariable UUID tenantId,
+        @RequestPart("file") MultipartFile file,
+        @RequestParam(defaultValue = "false") boolean dryRun
+    ) throws IOException {
+        rejectEmpty(file);
+        var result = subjectImportService.importSubjects(tenantId, file.getInputStream(), dryRun);
+        return ResponseEntity.status(dryRun ? HttpStatus.OK : HttpStatus.CREATED).body(ApiResponse.success(result));
+    }
+
+    @PostMapping(value = "/classes", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize(AppRoles.OWNER_OR_ADMIN)
+    public ResponseEntity<ApiResponse<ImportResult<String>>> importClasses(
+        @PathVariable UUID tenantId,
+        @RequestPart("file") MultipartFile file,
+        @RequestParam(defaultValue = "false") boolean dryRun
+    ) throws IOException {
+        rejectEmpty(file);
+        var result = classImportService.importClasses(tenantId, file.getInputStream(), dryRun);
+        return ResponseEntity.status(dryRun ? HttpStatus.OK : HttpStatus.CREATED).body(ApiResponse.success(result));
+    }
+
+    @PostMapping(value = "/opening-balances", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize(AppRoles.OWNER_OR_ADMIN)
+    public ResponseEntity<ApiResponse<ImportResult<String>>> importOpeningBalances(
+        @PathVariable UUID tenantId,
+        @RequestPart("file") MultipartFile file,
+        @RequestParam(defaultValue = "false") boolean dryRun
+    ) throws IOException {
+        rejectEmpty(file);
+        var result = openingBalanceImportService.importOpeningBalances(tenantId, file.getInputStream(), dryRun);
+        return ResponseEntity.status(dryRun ? HttpStatus.OK : HttpStatus.CREATED).body(ApiResponse.success(result));
     }
 
     private static void rejectEmpty(MultipartFile file) {

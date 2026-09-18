@@ -32,7 +32,9 @@ test.describe('login workflow', () => {
     await page.getByPlaceholder('Password').fill('Secret@123');
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 
-    await expect(page).toHaveURL(new RegExp(`/tenants/${TENANT}`));
+    // Lands in the tenant area. The URL segment is a cosmetic slug derived from branding, not the
+    // UUID — the JWT's tenantId is authoritative.
+    await expect(page).toHaveURL(/\/tenants\/[^/]+\/dashboard/);
   });
 });
 

@@ -16,7 +16,11 @@ public record InvoiceResponse(
     LocalDate dueDate,
     InvoiceStatus status,
     boolean openingBalance,
-    String description
+    String description,
+    /** Session this invoice belongs to (for session+month filtering on the cashier screen). */
+    UUID academicYearId,
+    /** Structure term = month number (1..12) when billed monthly; null for ad-hoc/annual. */
+    Integer termNumber
 ) {
     public static InvoiceResponse from(FeeInvoice inv) {
         return new InvoiceResponse(
@@ -29,7 +33,9 @@ public record InvoiceResponse(
             inv.getDueDate(),
             inv.getStatus(),
             inv.isOpeningBalance(),
-            inv.getDescription()
+            inv.getDescription(),
+            inv.getAcademicYearId(),
+            inv.getStructureTermNumber()
         );
     }
 }

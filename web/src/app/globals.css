@@ -6,14 +6,16 @@
    These mirror the defaults from src/brand/branding.config.ts so the very first
    render (before BrandingProvider mounts) is already styled correctly. */
 :root {
-  --brand-primary:        #4f46e5;
+  /* Scalio Edu platform palette — the white-label default. A school's own colours
+     (Settings → School Branding) override these at runtime via BrandingProvider. */
+  --brand-primary:        #B00000;
   --brand-primary-fg:     #ffffff;
-  --brand-primary-soft:   #eef2ff;
-  --brand-primary-hover:  #4338ca;
+  --brand-primary-soft:   #fbeaea;
+  --brand-primary-hover:  #8a0000;
 
-  --brand-accent:         #10b981;
+  --brand-accent:         #111827;
   --brand-accent-fg:      #ffffff;
-  --brand-accent-soft:    #ecfdf5;
+  --brand-accent-soft:    #eef1f6;
 
   --brand-radius:         0.625rem;
 }

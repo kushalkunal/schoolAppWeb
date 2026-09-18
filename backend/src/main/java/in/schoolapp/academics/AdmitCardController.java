@@ -52,6 +52,26 @@ public class AdmitCardController {
         return ApiResponse.success(admitCardService.listForExam(tenantId, examId, status));
     }
 
+    /** Auto-enrollment preview: active-student count per participating class (Step 4). */
+    @GetMapping("/enrollment-summary")
+    @PreAuthorize(AppRoles.OWNER_OR_ADMIN)
+    public ApiResponse<in.schoolapp.academics.dto.ExamEnrollmentSummaryResponse> enrollmentSummary(
+        @PathVariable UUID tenantId,
+        @PathVariable UUID examId
+    ) {
+        return ApiResponse.success(admitCardService.enrollmentSummary(tenantId, examId));
+    }
+
+    /** Pre-flight validation before generating admit cards (Step 9). */
+    @GetMapping("/validate")
+    @PreAuthorize(AppRoles.OWNER_OR_ADMIN)
+    public ApiResponse<in.schoolapp.academics.dto.AdmitCardValidationResponse> validate(
+        @PathVariable UUID tenantId,
+        @PathVariable UUID examId
+    ) {
+        return ApiResponse.success(admitCardService.validate(tenantId, examId));
+    }
+
     /**
      * Bulk-generate admit cards for all eligible students in this exam's section/class.
      * Idempotent — skips already-generated cards; re-evaluates BLOCKED ones in case fees cleared.
@@ -77,7 +97,8 @@ public class AdmitCardController {
         @PathVariable UUID examId,
         @PathVariable UUID studentId
     ) {
-        return ApiResponse.success(admitCardService.generateForStudent(tenantId, examId, studentId));
+        // force=true so an OVERRIDE-policy exam can issue this student's card despite dues
+        return ApiResponse.success(admitCardService.generateForStudent(tenantId, examId, studentId, true));
     }
 
     /**

@@ -67,6 +67,7 @@ public class ComponentMarksService {
     private final ExamSubjectConfigRepository configRepository;
     private final SubjectRepository subjectRepository;
     private final TeacherSubjectAssignmentRepository teacherSubjectAssignmentRepository;
+    private final in.schoolapp.timetable.repository.TimetableEntryRepository timetableEntryRepository;
     private final ExamSectionSubmissionRepository sectionSubmissionRepository;
     private final StaffRepository staffRepository;
     private final ExamService examService;
@@ -120,7 +121,12 @@ public class ComponentMarksService {
                 .findBySectionIdAndAcademicYearId(sectionId, academicYearId).stream()
                 .filter(a -> a.getStaffId().equals(staffId))
                 .map(TeacherSubjectAssignment::getSubjectId)
-                .collect(Collectors.toSet());
+                .collect(Collectors.toCollection(java.util.HashSet::new));
+            // Also include subjects this teacher teaches in this section via the timetable —
+            // allocations are commonly set up there rather than as explicit subject assignments.
+            timetableEntryRepository.findByTeacherId(staffId).stream()
+                .filter(e -> sectionId.equals(e.getSectionId()) && e.getSubjectId() != null)
+                .forEach(e -> assignedSubjectIds.add(e.getSubjectId()));
             configsBySubject = configsBySubject.entrySet().stream()
                 .filter(e -> assignedSubjectIds.contains(e.getKey()))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
@@ -229,6 +235,12 @@ public class ComponentMarksService {
                 "Marks have been locked by the class teacher. Only the Principal can make changes.");
         }
 
+        // Per-teacher lock: once a subject teacher submits their marks final, those marks are locked
+        // for them — only the section's class teacher or the Principal may change them afterwards.
+        boolean isOwnClassTeacher = AppRoles.CLASS_TEACHER.equals(role)
+            && staffId != null && staffId.equals(section.getClassTeacherId());
+        boolean canEditFinalized = isPrincipalOrAdmin || isOwnClassTeacher;
+
         // Load configs for validation
         Map<UUID, ExamSubjectConfig> configsById = configRepository
             .findByExamIdOrderBySubjectIdAscSortOrderAsc(examId).stream()
@@ -257,6 +269,12 @@ public class ComponentMarksService {
                     m.setSectionId(req.sectionId());
                     return m;
                 });
+
+            // Already-finalised marks are locked for the submitting teacher.
+            if (mark.getId() != null && !mark.isDraft() && !canEditFinalized) {
+                throw new AppException(ErrorCode.MARKS_ALREADY_FINALIZED,
+                    "These marks are already submitted and locked. Ask the class teacher or Principal to change them.");
+            }
 
             mark.setObtained(entry.absent() ? BigDecimal.ZERO : entry.obtained());
             mark.setAbsent(entry.absent());

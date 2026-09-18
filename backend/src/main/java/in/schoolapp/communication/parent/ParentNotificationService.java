@@ -43,6 +43,7 @@ public class ParentNotificationService {
     private final StudentService studentService;
     private final WhatsAppNotifier whatsAppNotifier;
     private final EmailSender emailSender;
+    private final in.schoolapp.notification.sms.SmsSender smsSender;
     private final ParentMessageRepository inboxRepo;
 
     /**
@@ -98,7 +99,21 @@ public class ParentNotificationService {
             }
         }
 
-        if (!waSent && !emailSent) {
+        // SMS fallback — only when WhatsApp didn't go through (same phone), and the tenant has
+        // opted into SMS_FALLBACK. Keeps SMS as a reliability net rather than duplicate spam.
+        boolean smsSent = false;
+        if (!waSent && parent.getPhone() != null && !parent.getPhone().isBlank()
+                && featureFlagService.isEnabled(tenantId, FeatureKey.SMS_FALLBACK)) {
+            try {
+                smsSender.send(tenantId, parent.getPhone(), body);
+                smsSent = true;
+                writeInbox(tenantId, studentId, parent.getId(), "SMS", category, emailSubject, body, mediaUrl);
+            } catch (Exception e) {
+                log.warn("SMS fallback failed student={} category={}: {}", studentId, category, e.getMessage());
+            }
+        }
+
+        if (!waSent && !emailSent && !smsSent) {
             log.warn("Notify produced zero sends — no contacts. student={} parent={} category={}",
                 studentId, parent.getId(), category);
             return Outcome.NO_CONTACT;
@@ -111,7 +126,8 @@ public class ParentNotificationService {
         }
         return waSent && emailSent ? Outcome.SENT_BOTH
             : waSent ? Outcome.SENT_WA_ONLY
-            : Outcome.SENT_EMAIL_ONLY;
+            : emailSent ? Outcome.SENT_EMAIL_ONLY
+            : Outcome.SENT_SMS_ONLY;
     }
 
     /** Convenience overload for text-only notifications (no media URL). */
@@ -141,7 +157,7 @@ public class ParentNotificationService {
     }
 
     public enum Outcome {
-        SENT_BOTH, SENT_WA_ONLY, SENT_EMAIL_ONLY,
+        SENT_BOTH, SENT_WA_ONLY, SENT_EMAIL_ONLY, SENT_SMS_ONLY,
         NO_CONTACT, NO_PRIMARY_PARENT,
         MASTER_FLAG_OFF, CATEGORY_FLAG_OFF
     }

@@ -26,7 +26,7 @@ public class VisitorController {
     private final VisitorService service;
 
     @PostMapping
-    @PreAuthorize(AppRoles.OWNER_OR_ADMIN)
+    @PreAuthorize(AppRoles.FRONT_DESK)
     public ResponseEntity<ApiResponse<VisitorResponse>> checkIn(
         @PathVariable UUID tenantId,
         @Valid @RequestBody CreateVisitorRequest req
@@ -36,7 +36,7 @@ public class VisitorController {
     }
 
     @PostMapping("/{id}/check-out")
-    @PreAuthorize(AppRoles.OWNER_OR_ADMIN)
+    @PreAuthorize(AppRoles.FRONT_DESK)
     public ApiResponse<VisitorResponse> checkOut(
         @PathVariable UUID tenantId, @PathVariable UUID id
     ) {
@@ -44,7 +44,7 @@ public class VisitorController {
     }
 
     @GetMapping
-    @PreAuthorize(AppRoles.OWNER_OR_ADMIN)
+    @PreAuthorize(AppRoles.FRONT_DESK)
     public ApiResponse<Page<VisitorResponse>> list(
         @PathVariable UUID tenantId,
         @RequestParam(defaultValue = "0") int page,
@@ -54,7 +54,7 @@ public class VisitorController {
     }
 
     @GetMapping("/open")
-    @PreAuthorize(AppRoles.OWNER_OR_ADMIN)
+    @PreAuthorize(AppRoles.FRONT_DESK)
     public ApiResponse<List<VisitorResponse>> open(@PathVariable UUID tenantId) {
         return ApiResponse.success(service.listOpen(tenantId));
     }

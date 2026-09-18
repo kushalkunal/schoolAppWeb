@@ -1,5 +1,6 @@
 import axios, { AxiosError, AxiosRequestConfig } from 'axios';
 import { tokenStorage } from '@/auth/tokenStorage';
+import { decodeJwt } from '@/auth/jwt';
 import { ApiError } from './errors';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8080';
@@ -9,11 +10,30 @@ export const apiClient = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-// --- Request interceptor: attach bearer token ---
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// --- Request interceptor: attach bearer token + resolve the cosmetic tenant slug ---
 apiClient.interceptors.request.use((config) => {
   const auth = tokenStorage.read();
   if (auth?.accessToken) {
     config.headers.set('Authorization', `Bearer ${auth.accessToken}`);
+    // The browser URL carries a human-readable tenant *slug*, but the backend path needs the real
+    // school UUID. The authoritative tenant is always the JWT's `tenantId` claim — a user can only
+    // ever act on their own school — so we rewrite `/api/v1/tenants/{slug}/…` → `/…/{uuid}/…`.
+    if (config.url) {
+      config.url = config.url.replace(
+        /(\/api\/v1\/tenants\/)([^/?#]+)(\/|$)/,
+        (full, pre: string, seg: string, post: string) => {
+          if (UUID_RE.test(seg)) return full; // already the real id
+          try {
+            const { tenantId } = decodeJwt(auth.accessToken);
+            return tenantId ? `${pre}${tenantId}${post}` : full;
+          } catch {
+            return full;
+          }
+        },
+      );
+    }
   }
   return config;
 });

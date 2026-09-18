@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
-import { UserX, Wand2, AlertTriangle, CheckCircle2, Radio } from 'lucide-react';
+import { UserX, Wand2, AlertTriangle, CheckCircle2, Radio, History, Clock } from 'lucide-react';
 import { substitutionApi, type PeriodPlan } from '@/api/endpoints/substitution';
 import { timetableApi } from '@/api/endpoints/timetable';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -32,9 +32,11 @@ export default function SmartReplacementPage() {
   const toast = useToast();
   const [teacherId, setTeacherId] = useState('');
   const [picks, setPicks] = useState<Record<string, string>>({});   // periodId → chosen staffId
+  const [autoMsgs, setAutoMsgs] = useState<string[]>([]);            // last auto-assign detail
 
   const dashboardQ = useQuery({ queryKey: ['sub-dashboard', tenantId], queryFn: () => substitutionApi.dashboard(tenantId), enabled: !!tenantId });
   const absentQ = useQuery({ queryKey: ['sub-absent', tenantId], queryFn: () => substitutionApi.absentToday(tenantId), enabled: !!tenantId });
+  const historyQ = useQuery({ queryKey: ['sub-history', tenantId], queryFn: () => substitutionApi.history(tenantId), enabled: !!tenantId });
   const planQ = useQuery({
     queryKey: ['sub-plan', tenantId, teacherId],
     queryFn: () => substitutionApi.plan(tenantId, teacherId),
@@ -53,11 +55,12 @@ export default function SmartReplacementPage() {
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['sub-plan', tenantId, teacherId] });
     qc.invalidateQueries({ queryKey: ['sub-dashboard', tenantId] });
+    qc.invalidateQueries({ queryKey: ['sub-history', tenantId] });
   };
 
   const autoAssign = useMutation({
     mutationFn: () => substitutionApi.autoAssign(tenantId, teacherId),
-    onSuccess: (r) => { toast.success(`Auto-assigned ${r.assigned} period(s); skipped ${r.skipped}`); refresh(); },
+    onSuccess: (r) => { setAutoMsgs(r.messages); toast.success(`Auto-assigned ${r.assigned} period(s); skipped ${r.skipped}`); refresh(); },
     onError: (e: unknown) => toast.error(e instanceof Error ? e.message : 'Auto-assign failed'),
   });
 
@@ -99,7 +102,7 @@ export default function SmartReplacementPage() {
             <select
               className="w-full max-w-md rounded-lg border border-slate-300 px-3 py-2 text-sm"
               value={teacherId}
-              onChange={(e) => setTeacherId(e.target.value)}
+              onChange={(e) => { setTeacherId(e.target.value); setAutoMsgs([]); }}
             >
               <option value="">— select an absent teacher —</option>
               {absentQ.data?.map((t) => (
@@ -131,6 +134,12 @@ export default function SmartReplacementPage() {
               </p>
             )}
           </CardHeader>
+          {autoMsgs.length > 0 && (
+            <div className="mx-4 mt-3 rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-xs text-slate-600 space-y-0.5">
+              <p className="font-medium text-slate-700">Auto-assign result</p>
+              {autoMsgs.map((m, i) => <p key={i}>• {m}</p>)}
+            </div>
+          )}
           <CardBody className="p-0 overflow-x-auto">
             {plan.periods.length === 0 ? (
               <p className="py-8 text-center text-sm text-slate-400">This teacher has no classes scheduled today.</p>
@@ -156,7 +165,11 @@ export default function SmartReplacementPage() {
                       <td className="px-4 py-3">{p.subjectName}</td>
                       <td className="px-4 py-3">
                         {p.alreadyCovered ? (
-                          <Badge tone="success">Covered</Badge>
+                          <span className="inline-flex items-center gap-1.5">
+                            <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />
+                            <span className="font-medium text-slate-700">{p.coveredByName ?? 'Covered'}</span>
+                            <Badge tone="success" size="sm">covering</Badge>
+                          </span>
                         ) : p.candidates.length === 0 ? (
                           <Badge tone="danger">No free teacher</Badge>
                         ) : (
@@ -191,6 +204,45 @@ export default function SmartReplacementPage() {
           </CardBody>
         </Card>
       )}
+
+      {/* Coverage history — who was absent and who took the class */}
+      <Card>
+        <CardHeader><CardTitle className="text-base flex items-center gap-2"><History size={16} /> Coverage history</CardTitle></CardHeader>
+        <CardBody className="p-0 overflow-x-auto">
+          {historyQ.isLoading ? (
+            <div className="flex items-center gap-2 text-slate-500 p-4"><Spinner /> Loading history…</div>
+          ) : !historyQ.data || historyQ.data.length === 0 ? (
+            <p className="py-8 text-center text-sm text-slate-400">No substitutions recorded yet.</p>
+          ) : (
+            <table className="w-full text-sm min-w-[820px]">
+              <thead className="border-b border-slate-100">
+                <tr className="text-left text-xs uppercase tracking-wide text-slate-400">
+                  <th className="px-4 py-3 font-medium">Date</th>
+                  <th className="px-4 py-3 font-medium">Period</th>
+                  <th className="px-4 py-3 font-medium">Class</th>
+                  <th className="px-4 py-3 font-medium">Subject</th>
+                  <th className="px-4 py-3 font-medium">Absent teacher</th>
+                  <th className="px-4 py-3 font-medium">Taken by</th>
+                  <th className="px-4 py-3 font-medium">Attendance marked by</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {historyQ.data.map((h, i) => (
+                  <tr key={i} className="hover:bg-slate-50/60">
+                    <td className="px-4 py-2.5 whitespace-nowrap text-slate-500"><span className="inline-flex items-center gap-1"><Clock size={12} />{h.date}</span></td>
+                    <td className="px-4 py-2.5">{h.periodName}</td>
+                    <td className="px-4 py-2.5">{h.sectionLabel}</td>
+                    <td className="px-4 py-2.5">{h.subjectName}</td>
+                    <td className="px-4 py-2.5"><span className="inline-flex items-center gap-1 text-amber-700"><UserX size={12} />{h.absentTeacherName}</span></td>
+                    <td className="px-4 py-2.5"><Badge tone="primary">{h.substituteName}</Badge></td>
+                    <td className="px-4 py-2.5 text-slate-500">{h.attendanceMarkedBy || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </CardBody>
+      </Card>
     </div>
   );
 }

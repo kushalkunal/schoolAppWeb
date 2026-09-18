@@ -54,10 +54,6 @@ public class AttendanceService {
     private final ApplicationEventPublisher events;
     private final in.schoolapp.calendar.SchoolCalendarService calendarService;
     private final in.schoolapp.timetable.repository.TimetableSubstitutionRepository substitutionRepository;
-    private final in.schoolapp.timetable.repository.TimetablePeriodRepository periodRepository;
-
-    /** Grace window around a substitution period during which the substitute may mark attendance. */
-    private static final long SUBSTITUTE_GRACE_MINUTES = 5;
 
     @Transactional
     public AttendanceSubmitResponse submitAttendance(
@@ -70,8 +66,8 @@ public class AttendanceService {
         // RBAC: who may mark this section's attendance today —
         //   • PRINCIPAL / SCHOOL_OWNER / ADMIN — any section, any day;
         //   • the section's CLASS_TEACHER;
-        //   • a substitute teacher with an ACTIVE substitution for this section (today, within the
-        //     substituted period's time window). Temporary rights are derived from the substitution
+        //   • a substitute teacher with a substitution for this section today. Temporary rights are
+        //     derived from the substitution
         //     — no manual permission grant — and expire automatically after the period ends.
         String role = TenantContext.getRole();
         boolean isPrincipalOrAdmin = "PRINCIPAL".equals(role) || "SCHOOL_OWNER".equals(role) || "ADMIN".equals(role);
@@ -264,24 +260,16 @@ public class AttendanceService {
     }
 
     /**
-     * True when {@code staffId} holds an active substitution for {@code sectionId}: a substitution
-     * row for this section + date where they are the substitute, the date is today, and the current
-     * time is within the substituted period's window (± a small grace). This is the automatic,
-     * time-boxed temporary attendance right — it expires once the period ends.
+     * True when {@code staffId} holds an active substitution for {@code sectionId} today: any
+     * substitution row for this section + date where they are the substitute. The temporary
+     * attendance right is granted for the whole school day of the substitution — daily attendance
+     * is a single per-section/day record (locked once submitted, audited via {@code submittedBy}),
+     * so it cannot be tied to a single period's minute-window. The right is automatic (derived from
+     * the substitution, no manual grant) and auto-expires the next day.
      */
     private boolean hasActiveSubstitution(UUID tenantId, UUID sectionId, UUID staffId, LocalDate date) {
         if (staffId == null || !date.equals(LocalDate.now())) return false;   // today only
-        java.time.LocalTime now = java.time.LocalTime.now();
-        for (var sub : substitutionRepository.findBySubstituteTeacherIdAndDate(staffId, date)) {
-            if (!sectionId.equals(sub.getSectionId()) || !tenantId.equals(sub.getSchoolId())) continue;
-            var period = periodRepository.findById(sub.getPeriodId()).orElse(null);
-            if (period == null || period.getStartTime() == null || period.getEndTime() == null) {
-                return true;   // no time bounds → valid for the whole day
-            }
-            boolean started = !now.isBefore(period.getStartTime().minusMinutes(SUBSTITUTE_GRACE_MINUTES));
-            boolean notEnded = !now.isAfter(period.getEndTime().plusMinutes(SUBSTITUTE_GRACE_MINUTES));
-            if (started && notEnded) return true;
-        }
-        return false;
+        return substitutionRepository.findBySubstituteTeacherIdAndDate(staffId, date).stream()
+            .anyMatch(sub -> sectionId.equals(sub.getSectionId()) && tenantId.equals(sub.getSchoolId()));
     }
 }

@@ -80,9 +80,11 @@ public interface FeePaymentRepository extends JpaRepository<FeePayment, UUID> {
                fp.payment_mode                                             AS paymentMode,
                fp.receipt_number                                           AS receiptNumber,
                fp.receipt_pdf_url                                          AS receiptPdfUrl,
-               fp.payment_date                                             AS paymentDate
+               fp.payment_date                                             AS paymentDate,
+               st.first_name || ' ' || COALESCE(st.last_name, '')         AS collectedByName
         FROM fee_payments fp
         LEFT JOIN students s ON s.id = fp.student_id
+        LEFT JOIN staff st ON st.id = fp.collected_by_id
         WHERE fp.school_id = :schoolId
         ORDER BY fp.created_at DESC
         LIMIT :lim
@@ -100,6 +102,7 @@ public interface FeePaymentRepository extends JpaRepository<FeePayment, UUID> {
         String getReceiptNumber();
         String getReceiptPdfUrl();
         java.time.LocalDate getPaymentDate();
+        String getCollectedByName();
     }
 
     /**

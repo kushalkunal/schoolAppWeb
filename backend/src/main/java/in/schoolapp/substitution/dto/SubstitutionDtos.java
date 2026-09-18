@@ -33,6 +33,7 @@ public final class SubstitutionDtos {
         String subjectName,
         UUID recommendedStaffId,    // null when nobody is free
         boolean alreadyCovered,     // a substitution already exists for this slot
+        String coveredByName,       // substitute already covering this slot (when alreadyCovered)
         List<Candidate> candidates
     ) {}
 

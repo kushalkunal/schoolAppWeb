@@ -123,7 +123,8 @@ public class FeeDashboardService {
                 PaymentMode.valueOf(p.getPaymentMode()),
                 p.getReceiptNumber(),
                 p.getReceiptPdfUrl(),
-                p.getPaymentDate()
+                p.getPaymentDate(),
+                p.getCollectedByName()
             ))
             .toList();
     }

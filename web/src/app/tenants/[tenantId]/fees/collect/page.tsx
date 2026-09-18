@@ -21,6 +21,7 @@ import {
 import { studentsApi } from '@/api/endpoints/students';
 import { schoolApi } from '@/api/endpoints/school';
 import { feesApi } from '@/api/endpoints/fees';
+import { academicsApi } from '@/api/endpoints/academics';
 import { feeStructureApi, type FeeHeadResponse, type MatrixResponse } from '@/api/endpoints/feeStructure';
 import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
@@ -33,6 +34,19 @@ import { formatINR, formatDate, cn } from '@/lib/utils';
 import type { PaymentMode, QuickCollectRequest, StudentResponse } from '@/types/domain';
 
 type BrowseMode = 'search' | 'class';
+
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'];
+
+/** 12 months of a session keyed by term number (1..12), labelled from the session start date. */
+function monthsOf(startISO?: string): { term: number; label: string }[] {
+  if (!startISO) return Array.from({ length: 12 }, (_, i) => ({ term: i + 1, label: `Month ${i + 1}` }));
+  const start = new Date(startISO + 'T00:00:00');
+  return Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(start.getFullYear(), start.getMonth() + i, 1);
+    return { term: i + 1, label: `${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}` };
+  });
+}
 
 export default function QuickCollectPage() {
   const params = useParams();
@@ -50,6 +64,10 @@ export default function QuickCollectPage() {
   const [amountRupees, setAmountRupees] = useState('');
   const [mode, setMode] = useState<PaymentMode>('CASH');
   const [notes, setNotes] = useState('');
+
+  // ---------- session + month filter ----------
+  const [sessionFilter, setSessionFilter] = useState('');   // academicYearId ('' = all sessions)
+  const [monthFilter, setMonthFilter] = useState('');       // termNumber as string ('' = all months)
 
   // ---------- bill builder state ----------
   // Which invoice IDs the cashier has checked for this collection
@@ -86,6 +104,24 @@ export default function QuickCollectPage() {
     queryFn: () => feesApi.studentSummary(tenantId, selected!.id),
     enabled: !!tenantId && !!selected,
   });
+
+  // Academic sessions for the session selector (+ month labels per session)
+  const yearsQ = useQuery({
+    queryKey: ['academic-years', tenantId],
+    queryFn: () => academicsApi.listAcademicYears(tenantId),
+    enabled: !!tenantId,
+    staleTime: 10 * 60_000,
+  });
+  const sessions = yearsQ.data ?? [];
+  const months = useMemo(
+    () => monthsOf(sessions.find((y) => y.id === sessionFilter)?.startDate),
+    [sessions, sessionFilter],
+  );
+
+  // A pending invoice matches the current session+month filter
+  const matchesFilter = (i: { academicYearId: string | null; termNumber: number | null }) =>
+    (!sessionFilter || i.academicYearId === sessionFilter)
+    && (!monthFilter || i.termNumber === Number(monthFilter));
 
   // Fee heads for name resolution (Tuition Fee, Transport Fee, etc.)
   const feeHeadsQ = useQuery({
@@ -129,18 +165,19 @@ export default function QuickCollectPage() {
     staleTime: 5 * 60_000,
   });
 
-  // Pre-select all pending invoices when student summary loads
+  // Pre-select pending invoices matching the session+month filter (re-runs when the filter changes,
+  // so picking a month pulls exactly that month's dues and auto-checks them).
   useEffect(() => {
-    if (summaryQ.data) {
-      const pending = summaryQ.data.invoices.filter(
-        (i) => i.status === 'PENDING' || i.status === 'PARTIAL',
-      );
-      setSelectedInvoiceIds(new Set(pending.map((i) => i.id)));
-      setMiscItems([]);
-    }
-  // Re-run only when the student changes (not every poll)
+    if (!summaryQ.data) return;
+    const pending = summaryQ.data.invoices
+      .filter((i) => i.status === 'PENDING' || i.status === 'PARTIAL')
+      .filter(matchesFilter);
+    setSelectedInvoiceIds(new Set(pending.map((i) => i.id)));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [summaryQ.data?.studentId]);
+  }, [summaryQ.data?.studentId, sessionFilter, monthFilter]);
+
+  // Reset misc items only when the student changes
+  useEffect(() => { setMiscItems([]); }, [summaryQ.data?.studentId]);
 
   // Auto-compute amount from checked invoices + misc items
   const computedTotal = useMemo(() => {
@@ -329,7 +366,33 @@ export default function QuickCollectPage() {
       {selected && !collect.isSuccess && (
         <Card>
           <CardHeader><CardTitle>Step 2 · Bill preview</CardTitle></CardHeader>
-          <CardBody>
+          <CardBody className="space-y-3">
+            {/* Session + month — pull a specific month's fee for collection */}
+            <div className="grid grid-cols-2 gap-2">
+              <label className="block">
+                <span className="text-xs font-medium text-slate-600">Session</span>
+                <select
+                  className="mt-1 block w-full rounded-brand border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:border-primary"
+                  value={sessionFilter}
+                  onChange={(e) => { setSessionFilter(e.target.value); setMonthFilter(''); }}
+                >
+                  <option value="">All sessions</option>
+                  {sessions.map((y) => <option key={y.id} value={y.id}>{y.name}{y.current ? ' (current)' : ''}</option>)}
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium text-slate-600">Month</span>
+                <select
+                  className="mt-1 block w-full rounded-brand border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:border-primary disabled:bg-slate-50"
+                  value={monthFilter}
+                  onChange={(e) => setMonthFilter(e.target.value)}
+                >
+                  <option value="">All months</option>
+                  {months.map((m) => <option key={m.term} value={m.term}>{m.label}</option>)}
+                </select>
+              </label>
+            </div>
+
             {summaryQ.isLoading && <Spinner />}
             {summaryQ.isError && (
               <p className="text-sm text-danger">Could not load fee details. Enter amount manually below.</p>
@@ -338,6 +401,7 @@ export default function QuickCollectPage() {
               <BillBuilder
                 summary={summaryQ.data}
                 feeHeads={feeHeads}
+                filter={matchesFilter}
                 selectedIds={selectedInvoiceIds}
                 onToggle={(id) =>
                   setSelectedInvoiceIds((prev) => {
@@ -363,6 +427,35 @@ export default function QuickCollectPage() {
                 }
               />
             )}
+          </CardBody>
+        </Card>
+      )}
+
+      {/* ====== PAYMENT HISTORY (who collected) ====== */}
+      {selected && !collect.isSuccess && summaryQ.data && summaryQ.data.recentPayments.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle>Payment history</CardTitle></CardHeader>
+          <CardBody className="p-0">
+            <ul className="divide-y divide-slate-100 text-sm">
+              {summaryQ.data.recentPayments.map((p) => (
+                <li key={p.id} className="flex items-center justify-between px-4 py-2.5">
+                  <div className="min-w-0">
+                    <div className="font-medium text-slate-800 tabular-nums">{formatINR(p.amountPaise)}
+                      <span className="ml-2 text-xs font-normal text-slate-400">{p.paymentMode}</span></div>
+                    <div className="text-xs text-slate-500">
+                      {formatDate(p.paymentDate)} · Receipt {p.receiptNumber}
+                      {p.collectedByName && <> · Collected by <span className="font-medium text-slate-600">{p.collectedByName}</span></>}
+                    </div>
+                  </div>
+                  {p.receiptPdfUrl && (
+                    <a href={p.receiptPdfUrl} target="_blank" rel="noopener noreferrer"
+                       className="text-xs text-primary hover:underline inline-flex items-center gap-1 shrink-0">
+                      <ExternalLink size={12} /> Receipt
+                    </a>
+                  )}
+                </li>
+              ))}
+            </ul>
           </CardBody>
         </Card>
       )}
@@ -481,12 +574,15 @@ interface BillBuilderProps {
   onMiscChange: (id: string, field: 'label' | 'amount', val: string) => void;
   onMiscAdd: () => void;
   onMiscRemove: (id: string) => void;
+  filter?: (i: { academicYearId: string | null; termNumber: number | null }) => boolean;
 }
 
 function BillBuilder({
-  summary, feeHeads, selectedIds, onToggle, miscItems, onMiscChange, onMiscAdd, onMiscRemove,
+  summary, feeHeads, selectedIds, onToggle, miscItems, onMiscChange, onMiscAdd, onMiscRemove, filter,
 }: BillBuilderProps) {
-  const pending = summary.invoices.filter((i) => i.status === 'PENDING' || i.status === 'PARTIAL');
+  const pending = summary.invoices
+    .filter((i) => i.status === 'PENDING' || i.status === 'PARTIAL')
+    .filter((i) => (filter ? filter(i) : true));
   const todayIso = new Date().toISOString().slice(0, 10);
 
   const headName = (feeHeadId: string | null, fallback: string | null) =>

@@ -477,9 +477,55 @@ VALUES (
 -- ============================================================
 INSERT INTO feature_overrides (id, school_id, feature_key, enabled, config, note, created_at, updated_at)
 VALUES
-    (gen_random_uuid(), '926c372c-139d-460d-83b1-1a80ef92db57', 'LIBRARY',         TRUE, '{}', 'E2E seed', NOW(), NOW()),
+    -- NOTE: the Library module is not feature-gated (no standalone LIBRARY key in the catalogue).
     (gen_random_uuid(), '926c372c-139d-460d-83b1-1a80ef92db57', 'PTM_SCHEDULING',  TRUE, '{}', 'E2E seed', NOW(), NOW()),
     (gen_random_uuid(), '926c372c-139d-460d-83b1-1a80ef92db57', 'STAFF_ATTENDANCE',TRUE, '{}', 'E2E seed', NOW(), NOW()),
     (gen_random_uuid(), '926c372c-139d-460d-83b1-1a80ef92db57', 'CIRCULARS',       TRUE, '{}', 'E2E seed', NOW(), NOW())
 ON CONFLICT DO NOTHING;
+
+-- ============================================================
+-- SUBJECTS (drive the exam-setup wizard / structure config / live-workflows Flow 4)
+-- ============================================================
+INSERT INTO subjects (id, school_id, name, code, created_at) VALUES
+    (gen_random_uuid(), '926c372c-139d-460d-83b1-1a80ef92db57', 'English',        'ENG', NOW()),
+    (gen_random_uuid(), '926c372c-139d-460d-83b1-1a80ef92db57', 'Mathematics',    'MAT', NOW()),
+    (gen_random_uuid(), '926c372c-139d-460d-83b1-1a80ef92db57', 'Science',        'SCI', NOW()),
+    (gen_random_uuid(), '926c372c-139d-460d-83b1-1a80ef92db57', 'Social Studies', 'SST', NOW()),
+    (gen_random_uuid(), '926c372c-139d-460d-83b1-1a80ef92db57', 'Hindi',          'HIN', NOW())
+ON CONFLICT (school_id, name) DO NOTHING;
+
+-- ============================================================
+-- PARENTS + STUDENT LINKS
+-- Needed so ALL_PARENTS circulars and ABSENCE_ALERT notifications have real recipients with a
+-- phone (live-workflows Flow 2 & Flow 3). Aarav Sharma (d0000001) is the student Flow 3 marks
+-- absent, so his parent must exist and be primary.
+-- ============================================================
+INSERT INTO parents (id, school_id, name, phone, email, relation_type, occupation, created_at) VALUES
+    ('c0000001-0000-0000-0000-000000000001', '926c372c-139d-460d-83b1-1a80ef92db57', 'Mahesh Sharma',   '+919800000001', 'mahesh.sharma@example.com',  'FATHER', 'Engineer',   NOW()),
+    ('c0000002-0000-0000-0000-000000000002', '926c372c-139d-460d-83b1-1a80ef92db57', 'Sunita Bose',     '+919800000002', 'sunita.bose@example.com',    'MOTHER', 'Doctor',     NOW()),
+    ('c0000003-0000-0000-0000-000000000003', '926c372c-139d-460d-83b1-1a80ef92db57', 'Rakesh Menon',    '+919800000003', 'rakesh.menon@example.com',   'FATHER', 'Teacher',    NOW()),
+    ('c0000004-0000-0000-0000-000000000004', '926c372c-139d-460d-83b1-1a80ef92db57', 'Geeta Choudhary', '+919800000004', 'geeta.choudhary@example.com','MOTHER', 'Accountant', NOW()),
+    ('c0000005-0000-0000-0000-000000000005', '926c372c-139d-460d-83b1-1a80ef92db57', 'Vinod Malhotra',  '+919800000005', 'vinod.malhotra@example.com', 'FATHER', 'Business',   NOW()),
+    ('c0000006-0000-0000-0000-000000000006', '926c372c-139d-460d-83b1-1a80ef92db57', 'Lata Iyer',       '+919800000006', 'lata.iyer@example.com',      'MOTHER', 'Lawyer',     NOW())
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO student_parent_links (id, student_id, parent_id, relation, is_primary) VALUES
+    (gen_random_uuid(), 'd0000001-0000-0000-0000-000000000001', 'c0000001-0000-0000-0000-000000000001', 'FATHER', TRUE),
+    (gen_random_uuid(), 'd0000015-0000-0000-0000-000000000015', 'c0000002-0000-0000-0000-000000000002', 'MOTHER', TRUE),
+    (gen_random_uuid(), 'd0000018-0000-0000-0000-000000000018', 'c0000003-0000-0000-0000-000000000003', 'FATHER', TRUE),
+    (gen_random_uuid(), 'd0000023-0000-0000-0000-000000000023', 'c0000004-0000-0000-0000-000000000004', 'MOTHER', TRUE),
+    (gen_random_uuid(), 'd0000033-0000-0000-0000-000000000033', 'c0000005-0000-0000-0000-000000000005', 'FATHER', TRUE),
+    (gen_random_uuid(), 'd0000020-0000-0000-0000-000000000020', 'c0000006-0000-0000-0000-000000000006', 'MOTHER', TRUE)
+ON CONFLICT DO NOTHING;
+
+-- ============================================================
+-- CLASSROOM "Lab-1" (rooms-ui.spec expects it pre-existing) + a holiday (calendar-ui.spec)
+-- ============================================================
+INSERT INTO classrooms (id, school_id, name, code, building, capacity, room_type, created_at) VALUES
+    (gen_random_uuid(), '926c372c-139d-460d-83b1-1a80ef92db57', 'Lab-1', 'LAB1', 'Main Block', 40, 'LAB', NOW())
+ON CONFLICT DO NOTHING;
+
+INSERT INTO school_holidays (id, school_id, holiday_date, name, type, created_at) VALUES
+    (gen_random_uuid(), '926c372c-139d-460d-83b1-1a80ef92db57', '2026-08-15', 'Independence Day', 'HOLIDAY', NOW())
+ON CONFLICT (school_id, holiday_date) DO NOTHING;
 

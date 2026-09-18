@@ -18,6 +18,9 @@ public interface ExamMarkRepository extends JpaRepository<ExamMark, UUID> {
 
     List<ExamMark> findByExamIdAndStudentId(UUID examId, UUID studentId);
 
+    @org.springframework.transaction.annotation.Transactional
+    void deleteByExamId(UUID examId);
+
     /**
      * Per-subject completion counts for a section — powers the class-teacher dashboard's
      * "which subjects are still pending entry" view (LLD §6.1).

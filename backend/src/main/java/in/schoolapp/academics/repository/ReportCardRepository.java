@@ -14,4 +14,7 @@ public interface ReportCardRepository extends JpaRepository<ReportCard, UUID> {
     List<ReportCard> findByExamId(UUID examId);
 
     List<ReportCard> findByStudentIdOrderByCreatedAtDesc(UUID studentId);
+
+    @org.springframework.transaction.annotation.Transactional
+    void deleteByExamId(UUID examId);
 }

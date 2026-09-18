@@ -10,15 +10,27 @@ import { test, expect } from '@playwright/test';
 import { loginAs, mockApi, TENANT } from './_session';
 
 const base = `/tenants/${TENANT}`;
-const dashboardUrl = new RegExp(`${base}/dashboard`);
 
-// [role, allowed routes, forbidden routes]
+// Some roles don't have a generic dashboard — the dashboard page itself redirects them to their
+// home screen (see dashboard/page.tsx): ACCOUNTANT → fees, LIBRARIAN → library, RECEPTIONIST →
+// visitors. A forbidden route is bounced to /dashboard by the route guard, which then re-redirects
+// these roles onward to that home. So assertions are made against each role's effective home.
+const HOME: Record<string, string> = {
+  CLASS_TEACHER: `${base}/dashboard`,
+  ACCOUNTANT:    `${base}/fees/dashboard`,
+  LIBRARIAN:     `${base}/library/books`,
+  VIEWER:        `${base}/dashboard`,
+  ADMIN:         `${base}/dashboard`,
+};
+
+// [role, allowed routes, forbidden routes]. Allowed routes are ones the role lands on directly
+// (don't list /dashboard for a role that gets redirected off it — assert its home instead).
 const MATRIX: Array<[string, string[], string[]]> = [
   ['CLASS_TEACHER', [`${base}/dashboard`, `${base}/attendance`, `${base}/academics/exams`, `${base}/homework`],
                     [`${base}/fees/collect`, `${base}/library/books`, `${base}/settings/school`, `${base}/hr/payroll`]],
   ['ACCOUNTANT',    [`${base}/fees/dashboard`, `${base}/expenses`],
                     [`${base}/attendance`, `${base}/academics/exams`, `${base}/library/books`, `${base}/settings/school`]],
-  ['LIBRARIAN',     [`${base}/library/books`, `${base}/dashboard`],
+  ['LIBRARIAN',     [`${base}/library/books`],
                     [`${base}/fees/dashboard`, `${base}/attendance`, `${base}/settings/school`]],
   ['VIEWER',        [`${base}/dashboard`, `${base}/students`],
                     [`${base}/fees/collect`, `${base}/settings/school`, `${base}/hr/payroll`]],
@@ -38,7 +50,8 @@ for (const [role, allowed, forbidden] of MATRIX) {
       test(`is redirected away from ${route}`, async ({ page }) => {
         await loginAs(page, role);
         await page.goto(route);
-        await expect(page).toHaveURL(dashboardUrl);
+        // Bounced to /dashboard by the guard, then on to the role's home for redirecting roles.
+        await expect(page).toHaveURL(new RegExp(HOME[role]!.replace(/[/]/g, '\\/')));
       });
     }
   });
@@ -71,9 +84,16 @@ test.describe('authentication', () => {
     await expect(page).toHaveURL(/\/login/);
   });
 
-  test('a tenant mismatch is redirected to login', async ({ page }) => {
-    await loginAs(page, 'ADMIN', '22222222-2222-2222-2222-222222222222'); // token tenant != URL tenant
+  // The URL's tenant segment is now a cosmetic, human-readable slug — it is NEVER trusted for
+  // access control. The authoritative tenant is the JWT's `tenantId` claim, enforced on every API
+  // call (the client rewrites the slug to the real UUID) and by row-level security on the backend.
+  // So an authenticated user is NOT bounced to /login just because the URL segment differs from
+  // their token's tenant; they simply only ever see their own school's data. (This is the
+  // client-side half of the fix/a1-tenant-isolation-idor change — isolation moved server-side.)
+  test('an authenticated user is not redirected by a cosmetic tenant slug in the URL', async ({ page }) => {
+    await loginAs(page, 'ADMIN', '22222222-2222-2222-2222-222222222222'); // token tenant != URL segment
     await page.goto(`${base}/dashboard`);
-    await expect(page).toHaveURL(/\/login/);
+    await expect(page).not.toHaveURL(/\/login/);
+    await expect(page).toHaveURL(/\/tenants\/[^/]+\/dashboard/);
   });
 });

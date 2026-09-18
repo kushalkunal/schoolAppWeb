@@ -20,6 +20,9 @@ import { teacherAssignmentsApi } from '@/api/endpoints/teacherAssignments';
 import { academicsApi } from '@/api/endpoints/academics';
 import { timetableApi } from '@/api/endpoints/timetable';
 import { substitutesApi } from '@/api/endpoints/substitutes';
+import { substitutionApi } from '@/api/endpoints/substitution';
+import { studentsApi } from '@/api/endpoints/students';
+import { feesApi } from '@/api/endpoints/fees';
 import { useAuth } from '@/auth/AuthProvider';
 import { useBranding } from '@/brand/BrandingProvider';
 import { Card, CardBody, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
@@ -65,17 +68,18 @@ export default function DashboardPage() {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
-  // Accountant: redirect to fee dashboard (their home)
+  // Focused roles land on their real home, not the principal/admin overview.
   useEffect(() => {
     if (role === 'ACCOUNTANT') router.replace(`/tenants/${tenantId}/fees/dashboard`);
     if (role === 'LIBRARIAN') router.replace(`/tenants/${tenantId}/library/books`);
+    if (role === 'RECEPTIONIST') router.replace(`/tenants/${tenantId}/visitors`);
   }, [role, tenantId, router]);
 
   // Teacher roles get a simplified dashboard
   if (role === 'CLASS_TEACHER' || role === 'SUBJECT_TEACHER') {
     return <TeacherDashboard tenantId={tenantId} firstName={firstName} greeting={greeting} />;
   }
-  if (role === 'ACCOUNTANT' || role === 'LIBRARIAN') return null;
+  if (role === 'ACCOUNTANT' || role === 'LIBRARIAN' || role === 'RECEPTIONIST') return null;
 
   const dashQ = useQuery<DashboardResponse>({
     queryKey: ['dashboard', tenantId],
@@ -196,6 +200,20 @@ export default function DashboardPage() {
           </span>
         }
       />
+
+      {/* ---------------- A5: Needs attention today (action-first) ---------------- */}
+      {/* Leads the page with the few things a principal/admin must act on, each one click
+          from resolution. Cards only appear when their count is non-zero; on a clean day the
+          strip collapses to a single "all clear" line — analytics stays below. */}
+      <NeedsAttention
+        tenantId={tenantId}
+        unmarked={d.unmarkedSectionsCount}
+        alertsToReview={d.alerts.critical + d.alerts.high}
+        feesAtRisk={d.fees.activeAtRiskCount}
+      />
+
+      {/* ---------------- Principal KPIs (school-wide overview) ---------------- */}
+      <PrincipalKpis tenantId={tenantId} />
 
       {/* ---------------- KPI tiles ---------------- */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -535,6 +553,127 @@ function jsToIsoDay(jsDay: number): number {
 function timeToMinutes(t: string): number {
   const [h, m] = t.split(':').map(Number);
   return (h ?? 0) * 60 + (m ?? 0);
+}
+
+/**
+ * A5: action-first attention strip. Surfaces only the items that need a decision today and
+ * deep-links each straight to where it's resolved. Reuses dashboard data already fetched — no
+ * new APIs. When everything is clear it shrinks to a single reassuring line.
+ */
+function NeedsAttention({
+  tenantId, unmarked, alertsToReview, feesAtRisk,
+}: { tenantId: string; unmarked: number; alertsToReview: number; feesAtRisk: number }) {
+  const items = [
+    unmarked > 0 && {
+      href: `/tenants/${tenantId}/attendance`,
+      icon: <CalendarCheck2 size={18} />,
+      label: `${unmarked} section${unmarked > 1 ? 's' : ''} not marked`,
+      cta: 'Review attendance',
+      tone: 'border-amber-200 bg-amber-50 text-amber-900',
+    },
+    feesAtRisk > 0 && {
+      href: `/tenants/${tenantId}/fees/defaulters`,
+      icon: <Wallet size={18} />,
+      label: `${feesAtRisk} student${feesAtRisk > 1 ? 's' : ''} at fee risk`,
+      cta: 'View defaulters',
+      tone: 'border-rose-200 bg-rose-50 text-rose-900',
+    },
+    alertsToReview > 0 && {
+      href: `/tenants/${tenantId}/risk`,
+      icon: <AlertTriangle size={18} />,
+      label: `${alertsToReview} alert${alertsToReview > 1 ? 's' : ''} to review`,
+      cta: 'Open alerts',
+      tone: 'border-orange-200 bg-orange-50 text-orange-900',
+    },
+  ].filter(Boolean) as Array<{ href: string; icon: React.ReactNode; label: string; cta: string; tone: string }>;
+
+  if (items.length === 0) {
+    return (
+      <Card>
+        <CardBody className="flex items-center gap-2 text-sm text-slate-600">
+          <CheckCircle2 size={18} className="text-green-600" />
+          You&apos;re all caught up — nothing needs attention right now.
+        </CardBody>
+      </Card>
+    );
+  }
+
+  return (
+    <div>
+      <p className="px-1 pb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+        Needs attention today
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {items.map((it) => (
+          <Link
+            key={it.href}
+            href={it.href}
+            className={`flex items-center justify-between gap-3 rounded-brand border px-4 py-3 transition hover:shadow-sm ${it.tone}`}
+          >
+            <span className="flex items-center gap-2.5 font-medium text-sm">
+              {it.icon}
+              {it.label}
+            </span>
+            <span className="inline-flex items-center gap-1 text-xs font-semibold whitespace-nowrap">
+              {it.cta} <ArrowUpRight size={12} />
+            </span>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * School-wide KPI strip for the Principal/Admin dashboard. Reuses existing endpoints only
+ * (no new APIs): student/teacher counts, today's collection + pending fees, upcoming exams,
+ * teachers absent/on-leave today. Each tile degrades independently if its query fails.
+ */
+function PrincipalKpis({ tenantId }: { tenantId: string }) {
+  const studentsQ = useQuery({
+    queryKey: ['students-count', tenantId],
+    queryFn: () => studentsApi.list(tenantId, { size: 1 }),
+    enabled: !!tenantId, retry: false, staleTime: 5 * 60_000,
+  });
+  const staffQ = useQuery({
+    queryKey: ['staff', tenantId],
+    queryFn: () => schoolApi.listStaff(tenantId),
+    enabled: !!tenantId, retry: false, staleTime: 5 * 60_000,
+  });
+  const feeQ = useQuery({
+    queryKey: ['fee-dashboard', tenantId],
+    queryFn: () => feesApi.dashboard(tenantId),
+    enabled: !!tenantId, retry: false,
+  });
+  const examsQ = useQuery({
+    queryKey: ['exams', tenantId],
+    queryFn: () => academicsApi.listExams(tenantId),
+    enabled: !!tenantId, retry: false,
+  });
+  const absentQ = useQuery({
+    queryKey: ['absent-today', tenantId],
+    queryFn: () => substitutionApi.absentToday(tenantId),
+    enabled: !!tenantId, retry: false,
+  });
+
+  const totalStudents = studentsQ.data?.meta?.total ?? studentsQ.data?.items.length;
+  const totalTeachers = (staffQ.data ?? []).filter(
+    (s) => ['CLASS_TEACHER', 'SUBJECT_TEACHER'].includes(s.role),
+  ).length;
+  const today = todayIso();
+  const upcomingExams = (examsQ.data ?? []).filter((e) => (e.startDate ?? '') >= today).length;
+  const teachersOnLeave = absentQ.data?.length ?? 0;
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <Stat label="Total students"  value={totalStudents ?? '—'} icon={<Users size={18} />} tone="primary" />
+      <Stat label="Total teachers"  value={staffQ.data ? totalTeachers : '—'} icon={<UserCog size={18} />} tone="info" />
+      <Stat label="Collected today" value={feeQ.data ? `₹${formatLakh(feeQ.data.collectedTodayPaise)}` : '—'} icon={<Wallet size={18} />} tone="success" />
+      <Stat label="Pending fees"    value={feeQ.data ? `₹${formatLakh(feeQ.data.totalOutstandingPaise)}` : '—'} icon={<AlertTriangle size={18} />} tone={feeQ.data && feeQ.data.totalOutstandingPaise > 0 ? 'warning' : 'info'} />
+      <Stat label="Upcoming exams"  value={examsQ.data ? upcomingExams : '—'} icon={<GraduationCap size={18} />} tone="info" />
+      <Stat label="Teachers on leave" value={absentQ.data ? teachersOnLeave : '—'} icon={<Plane size={18} />} tone={teachersOnLeave > 0 ? 'warning' : 'info'} />
+    </div>
+  );
 }
 
 function TeacherDashboard({ tenantId, firstName, greeting }: {

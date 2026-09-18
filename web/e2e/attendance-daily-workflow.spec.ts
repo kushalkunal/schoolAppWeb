@@ -89,10 +89,14 @@ test.describe.serial('Attendance daily workflow — dual context', () => {
   // Wipe today's attendance for Section 1A so every run starts clean (fresh mark).
   test.beforeAll(() => {
     try {
+      // Clear ALL of this section's attendance + locks, not just `${TODAY}`. The marker resolves the
+      // working date from the school calendar (the last working day, which can differ from the UTC
+      // "today" computed here), so a date-pinned delete can leave a stale lock behind and make the
+      // section appear locked on re-runs. Deleting by section keeps the test re-runnable.
       execSync(
         `docker exec schoolapp-postgres psql -U schoolapp -d schoolapp -c ` +
-        `"DELETE FROM attendance_records WHERE section_id='${SEC_1A}' AND date='${TODAY}'; ` +
-        `DELETE FROM attendance_section_locks WHERE section_id='${SEC_1A}' AND date='${TODAY}';"`,
+        `"DELETE FROM attendance_records WHERE section_id='${SEC_1A}'; ` +
+        `DELETE FROM attendance_section_locks WHERE section_id='${SEC_1A}';"`,
         { stdio: 'ignore' },
       );
       console.log('🧹  Cleared today\'s Section 1A attendance — fresh start');
@@ -221,8 +225,10 @@ test.describe.serial('Attendance daily workflow — dual context', () => {
     // ── Submit attendance ──
     await page.getByRole('button', { name: 'Submit attendance' }).click();
 
-    // Success confirmation: "Saved · N parent alert(s) queued"
-    await expect(page.getByText(/Saved/i)).toBeVisible({ timeout: 12_000 });
+    // Success confirmation. The transient "Saved · N parent alert(s) queued" banner is replaced the
+    // instant the section query refetches as locked (a class teacher can no longer mark, so the
+    // marker UI gives way to the lock banner). Accept either — both prove the submit succeeded.
+    await expect(page.getByText(/Saved ·|Attendance locked by/i)).toBeVisible({ timeout: 12_000 });
     console.log('✅  Teacher: attendance submitted successfully');
 
     await snap(page, '05-teacher-attendance-submitted-success-with-lock');

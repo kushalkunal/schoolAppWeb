@@ -62,7 +62,8 @@ public class AdmissionController {
     // ---------------- ADMIN ----------------
 
     @PostMapping("/api/v1/tenants/{tenantId}/admissions")
-    @PreAuthorize(AppRoles.OWNER_OR_ADMIN)
+    // Front desk logs walk-in enquiries; the rest of the funnel (offer/test/reject) stays admin-only.
+    @PreAuthorize(AppRoles.FRONT_DESK)
     @RequiresFeature(FeatureKey.ADMISSIONS_FUNNEL)
     public ResponseEntity<ApiResponse<AdmissionResponse>> createEnquiryAdmin(
         @PathVariable UUID tenantId,

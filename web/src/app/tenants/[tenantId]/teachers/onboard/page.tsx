@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
 import { MailCheck, Plus, Trash2, ChevronRight, Save, X, Edit2, UserCog } from 'lucide-react';
 import { schoolApi } from '@/api/endpoints/school';
+import { hrApi } from '@/api/endpoints/hr';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
@@ -14,7 +15,7 @@ import { Badge } from '@/components/ui/Badge';
 import { OWNER_OR_ADMIN, RequireRole } from '@/auth/RequireRole';
 import { useHasRole } from '@/auth/RequireRole';
 import { cn } from '@/lib/utils';
-import type { InviteTeacherRequest, StaffProfile, StaffResponse, UpdateStaffRequest } from '@/types/domain';
+import type { InviteTeacherRequest, LeaveType, StaffProfile, StaffResponse, UpdateStaffRequest } from '@/types/domain';
 
 const TEACHER_ROLES = [
   { value: 'CLASS_TEACHER',   label: 'Class Teacher' },
@@ -380,8 +381,26 @@ function TeacherDetailDrawer({
                     label="Account status"
                     value={staff.mustResetPassword ? 'Pending password reset' : 'Active'}
                   />
+                  <DetailRow label="Date of birth"     value={pv(staff.profile, 'dateOfBirth')} />
+                  <DetailRow label="Address"           value={pv(staff.profile, 'address')} />
+                  <DetailRow label="Emergency contact" value={pv(staff.profile, 'emergencyContact')} />
                 </dl>
               </section>
+
+              <ProfileSection title="Professional details" profile={staff.profile} fields={[
+                ['designation', 'Designation'], ['qualification', 'Qualification'],
+                ['experienceYears', 'Experience (yrs)'], ['employeeCode', 'Employee code'],
+                ['employmentType', 'Employment type'],
+              ]} />
+              <ProfileSection title="Identity (masked)" profile={staff.profile} fields={[
+                ['aadhaarNumber', 'Aadhaar'], ['panNumber', 'PAN'],
+              ]} />
+              <ProfileSection title="Bank details (masked)" profile={staff.profile} fields={[
+                ['bankName', 'Bank'], ['bankAccountNumber', 'Account no.'], ['ifscCode', 'IFSC'],
+              ]} />
+
+              {/* Leave balances — auto-seeded on onboarding; Principal/Admin can adjust */}
+              <LeaveBalancesPanel tenantId={tenantId} staffId={staff.id} canEdit={isAdmin} />
 
               {/* Class teacher assignment section */}
               {staff.role === 'CLASS_TEACHER' && (
@@ -440,6 +459,103 @@ function DetailRow({ label, value }: { label: string; value: string | null | und
       <dt className="text-xs text-slate-500">{label}</dt>
       <dd className="font-medium text-slate-800 mt-0.5">{value ?? '—'}</dd>
     </div>
+  );
+}
+
+/** Reads a value out of the staff profile JSONB as a display string. */
+function pv(profile: Record<string, unknown> | undefined, key: string): string | undefined {
+  const v = profile?.[key];
+  return v === null || v === undefined || v === '' ? undefined : String(v);
+}
+
+/** A grouped profile section; renders nothing if every field is empty. */
+function ProfileSection({
+  title, profile, fields,
+}: { title: string; profile: Record<string, unknown> | undefined; fields: [string, string][] }) {
+  const rows = fields.filter(([k]) => pv(profile, k) !== undefined);
+  if (rows.length === 0) return null;
+  return (
+    <section className="pt-2 border-t border-slate-100">
+      <h3 className="text-xs font-semibold text-slate-500 uppercase mb-3">{title}</h3>
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+        {rows.map(([k, label]) => <DetailRow key={k} label={label} value={pv(profile, k)} />)}
+      </dl>
+    </section>
+  );
+}
+
+const LEAVE_LABELS: Record<LeaveType, string> = {
+  CASUAL: 'Casual', SICK: 'Sick', EARNED: 'Earned', UNPAID: 'Unpaid',
+  MATERNITY: 'Maternity', PATERNITY: 'Paternity', COMP_OFF: 'Comp-off', OTHER: 'Other',
+};
+
+/** Leave balances for a staff member (entitled / used / left). Principal/Admin can edit entitled days. */
+function LeaveBalancesPanel({ tenantId, staffId, canEdit }: { tenantId: string; staffId: string; canEdit: boolean }) {
+  const qc = useQueryClient();
+  const year = new Date().getFullYear();
+  const balancesQ = useQuery({
+    queryKey: ['leave-balances', tenantId, staffId, year],
+    queryFn: () => hrApi.listLeaveBalances(tenantId, staffId, year),
+    enabled: !!tenantId && !!staffId,
+  });
+  const [draft, setDraft] = useState<Record<string, string>>({});
+
+  const save = useMutation({
+    mutationFn: ({ leaveType, entitledDays }: { leaveType: LeaveType; entitledDays: number }) =>
+      hrApi.updateLeaveBalance(tenantId, staffId, leaveType, { entitledDays }, year),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['leave-balances', tenantId, staffId, year] }),
+  });
+
+  return (
+    <section className="pt-2 border-t border-slate-100">
+      <h3 className="text-xs font-semibold text-slate-500 uppercase mb-3">Leave balances · {year}</h3>
+      {balancesQ.isLoading && <Spinner />}
+      {balancesQ.isError && <ErrorBanner error={balancesQ.error} onRetry={() => balancesQ.refetch()} />}
+      {save.isError && <ErrorBanner error={save.error} />}
+      {balancesQ.data && (
+        <table className="w-full text-sm">
+          <thead><tr className="text-xs uppercase text-slate-400 text-left">
+            <th className="py-1.5">Type</th><th className="py-1.5 text-right">Entitled</th>
+            <th className="py-1.5 text-right">Used</th><th className="py-1.5 text-right">Left</th>
+            {canEdit && <th className="py-1.5" />}
+          </tr></thead>
+          <tbody className="divide-y divide-slate-50">
+            {balancesQ.data.map((b) => {
+              const key = b.leaveType;
+              const editingVal = draft[key];
+              return (
+                <tr key={b.id}>
+                  <td className="py-1.5 font-medium text-slate-700">{LEAVE_LABELS[b.leaveType] ?? b.leaveType}</td>
+                  <td className="py-1.5 text-right">
+                    {canEdit ? (
+                      <input type="number" min="0" step="0.5"
+                        className="w-16 rounded border border-slate-200 px-2 py-1 text-right text-sm"
+                        value={editingVal ?? String(b.entitledDays)}
+                        onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.value }))} />
+                    ) : b.entitledDays}
+                  </td>
+                  <td className="py-1.5 text-right text-slate-500">{b.consumedDays}</td>
+                  <td className="py-1.5 text-right font-semibold tabular-nums">{b.remainingDays}</td>
+                  {canEdit && (
+                    <td className="py-1.5 text-right">
+                      {editingVal !== undefined && Number(editingVal) !== b.entitledDays && (
+                        <Button size="sm" variant="secondary" disabled={save.isPending}
+                          onClick={() => save.mutate({ leaveType: b.leaveType, entitledDays: Number(editingVal) })}>
+                          <Save size={12} className="mr-1" />Save
+                        </Button>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
+            {balancesQ.data.length === 0 && (
+              <tr><td colSpan={canEdit ? 5 : 4} className="py-3 text-center text-slate-400 text-xs">No leave balances yet.</td></tr>
+            )}
+          </tbody>
+        </table>
+      )}
+    </section>
   );
 }
 

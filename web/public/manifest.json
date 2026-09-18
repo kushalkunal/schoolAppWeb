@@ -1,13 +1,13 @@
 {
-  "name": "VMS School",
-  "short_name": "VMS",
-  "description": "School management — attendance, fees, academics.",
+  "name": "Scalio Edu",
+  "short_name": "Scalio Edu",
+  "description": "School management — attendance, fees, academics. Powered by Scalio Edu.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "background_color": "#f8fafc",
-  "theme_color": "#4f46e5",
+  "background_color": "#F8FAFC",
+  "theme_color": "#B00000",
   "icons": [
     {
       "src": "/brand/icon-192.png",

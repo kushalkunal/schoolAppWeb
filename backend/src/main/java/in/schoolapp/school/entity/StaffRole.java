@@ -14,5 +14,6 @@ public enum StaffRole {
     SUBJECT_TEACHER,    // marks entry for assigned subject/section only
     ACCOUNTANT,         // fee module only
     LIBRARIAN,          // library module: issue/return books, manage catalogue
+    RECEPTIONIST,       // front desk: visitor logging, admission enquiries, student lookup, circulars
     VIEWER              // read-only, no PII phone numbers
 }

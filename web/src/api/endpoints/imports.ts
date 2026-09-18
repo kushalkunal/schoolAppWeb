@@ -41,4 +41,15 @@ export const importsApi = {
       })
       .then((r) => r.data.data as ImportResult<T>);
   },
+
+  /** Generic CSV import for the simpler entity types (subjects / classes / opening-balances). */
+  generic<T = string>(tenantId: string, kind: 'subjects' | 'classes' | 'opening-balances', file: File, dryRun = true): Promise<ImportResult<T>> {
+    const form = new FormData();
+    form.append('file', file);
+    return apiClient
+      .post(`/api/v1/tenants/${tenantId}/imports/${kind}?dryRun=${dryRun}`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      .then((r) => r.data.data as ImportResult<T>);
+  },
 };

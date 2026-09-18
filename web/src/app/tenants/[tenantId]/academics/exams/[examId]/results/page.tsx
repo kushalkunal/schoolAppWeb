@@ -5,8 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  ChevronLeft, Trophy, Users, TrendingUp, AlertTriangle,
-  RefreshCw, Send, Download, BarChart2
+  ChevronLeft, Trophy, RefreshCw, Send, Download, BarChart2, CheckCircle2
 } from 'lucide-react';
 import { academicsApi } from '@/api/endpoints/academics';
 import { schoolApi } from '@/api/endpoints/school';
@@ -14,7 +13,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { ErrorBanner } from '@/components/ui/ErrorBanner';
 import { Spinner } from '@/components/ui/Spinner';
-import { OWNER_OR_ADMIN, RequireRole } from '@/auth/RequireRole';
+import { ATTENDANCE_WRITER, OWNER_OR_ADMIN, RequireRole } from '@/auth/RequireRole';
 import type { ExamResultResponse } from '@/types/domain';
 
 export default function ExamResultsPage() {
@@ -51,6 +50,14 @@ export default function ExamResultsPage() {
     },
   });
 
+  const verifyMutation = useMutation({
+    mutationFn: () => academicsApi.verifyResults(tenantId, examId, sectionId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['results', tenantId, examId, sectionId] });
+      qc.invalidateQueries({ queryKey: ['result-dashboard', tenantId, examId] });
+    },
+  });
+
   const publishMutation = useMutation({
     mutationFn: () => academicsApi.publishResults(tenantId, examId, sectionId),
     onSuccess: () => {
@@ -58,6 +65,10 @@ export default function ExamResultsPage() {
       qc.invalidateQueries({ queryKey: ['result-dashboard', tenantId, examId] });
     },
   });
+
+  const hasReady = resultsQ.data?.some(r => r.status === 'READY') ?? false;
+  const hasVerified = resultsQ.data?.some(r => r.status === 'VERIFIED') ?? false;
+  const allPublished = (resultsQ.data?.length ?? 0) > 0 && resultsQ.data!.every(r => r.status === 'PUBLISHED');
 
   function exportCsv(data: ExamResultResponse[]) {
     const header = 'Rank,Roll,Name,Admission No,Total Max,Obtained,Percentage,Grade,Pass/Fail\n';
@@ -164,10 +175,26 @@ export default function ExamResultsPage() {
                     <RefreshCw size={14} className="mr-1" />
                     {computeMutation.isPending ? 'Computing…' : 'Compute'}
                   </Button>
+                </RequireRole>
+                {/* Step 1: class teacher (or admin) verifies the computed results */}
+                <RequireRole roles={ATTENDANCE_WRITER}>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => verifyMutation.mutate()}
+                    disabled={verifyMutation.isPending || !hasReady}
+                  >
+                    <CheckCircle2 size={14} className="mr-1" />
+                    {verifyMutation.isPending ? 'Verifying…' : 'Verify'}
+                  </Button>
+                </RequireRole>
+                {/* Step 2: principal/admin publishes the verified results */}
+                <RequireRole roles={OWNER_OR_ADMIN}>
                   <Button
                     size="sm"
                     onClick={() => publishMutation.mutate()}
-                    disabled={publishMutation.isPending || !resultsQ.data?.some(r => r.status === 'READY')}
+                    disabled={publishMutation.isPending || !hasVerified}
+                    title={!hasVerified ? 'Results must be verified by the class teacher first' : undefined}
                   >
                     <Send size={14} className="mr-1" />
                     {publishMutation.isPending ? 'Publishing…' : 'Publish & Notify'}
@@ -183,7 +210,24 @@ export default function ExamResultsPage() {
           </div>
         </div>
 
+        {/* Flow hint: compute → verify (class teacher) → publish (principal) */}
+        {sectionId && resultsQ.data && resultsQ.data.length > 0 && !allPublished && (
+          <p className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded px-3 py-2">
+            {hasVerified
+              ? 'Results are verified. The Principal can now Publish & Notify to release report cards.'
+              : hasReady
+                ? 'Results are computed. The class teacher must Verify them, then the Principal can Publish.'
+                : 'Compute results after all marks are submitted, then Verify and Publish.'}
+          </p>
+        )}
+        {sectionId && allPublished && (
+          <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded px-3 py-2">
+            Results published — report cards generated and parents/teachers notified.
+          </p>
+        )}
+
         {computeMutation.isError && <ErrorBanner error={computeMutation.error} />}
+        {verifyMutation.isError && <ErrorBanner error={verifyMutation.error} />}
         {publishMutation.isError && <ErrorBanner error={publishMutation.error} />}
 
         {resultsQ.isLoading && <Spinner />}
@@ -285,6 +329,7 @@ function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; cls: string }> = {
     DRAFT: { label: 'Draft', cls: 'bg-slate-100 text-slate-500' },
     READY: { label: 'Ready', cls: 'bg-blue-50 text-blue-600' },
+    VERIFIED: { label: 'Verified', cls: 'bg-indigo-50 text-indigo-600' },
     PUBLISHED: { label: 'Published', cls: 'bg-green-50 text-green-700' },
   };
   const s = map[status] ?? { label: status, cls: 'bg-slate-100 text-slate-500' };

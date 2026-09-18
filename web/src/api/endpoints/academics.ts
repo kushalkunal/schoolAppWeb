@@ -1,7 +1,9 @@
-import { apiGet, apiPost } from '@/api/client';
+import { apiDelete, apiGet, apiPost, apiPut } from '@/api/client';
 import type {
+  AcademicYearResponse,
   AdmitCardDashboardResponse,
   AdmitCardResponse,
+  AdmitCardValidationResponse,
   BulkComponentMarksRequest,
   BulkMarksRequest,
   ComponentMarksSheetResponse,
@@ -9,14 +11,17 @@ import type {
   CreateExamRequest,
   CreateSubjectsRequest,
   ExamCompletionStatusResponse,
+  ExamEnrollmentSummaryResponse,
   ExamResponse,
   ExamResultResponse,
+  ExamScheduleRow,
   ExamStructureResponse,
   MarkResponse,
   MarksEntrySheetResponse,
   ReportCardResponse,
   ResultDashboardResponse,
   SubjectResponse,
+  UpsertScheduleRequest,
 } from '@/types/domain';
 
 /**
@@ -36,6 +41,11 @@ export const academicsApi = {
     return apiPost(`/api/v1/tenants/${tenantId}/subjects/bulk`, req);
   },
 
+  // Academic sessions (years)
+  listAcademicYears(tenantId: string): Promise<AcademicYearResponse[]> {
+    return apiGet(`/api/v1/tenants/${tenantId}/academic-years`);
+  },
+
   // Exams
   listExams(tenantId: string): Promise<ExamResponse[]> {
     return apiGet(`/api/v1/tenants/${tenantId}/exams`);
@@ -43,8 +53,32 @@ export const academicsApi = {
   createExam(tenantId: string, req: CreateExamRequest): Promise<ExamResponse> {
     return apiPost(`/api/v1/tenants/${tenantId}/exams`, req);
   },
+  deleteExam(tenantId: string, examId: string): Promise<void> {
+    return apiDelete(`/api/v1/tenants/${tenantId}/exams/${examId}`);
+  },
   publishExam(tenantId: string, examId: string): Promise<ExamResponse> {
     return apiPost(`/api/v1/tenants/${tenantId}/exams/${examId}/publish`);
+  },
+
+  // Participating classes (replace-all)
+  setParticipatingClasses(tenantId: string, examId: string, classIds: string[]): Promise<void> {
+    return apiPut(`/api/v1/tenants/${tenantId}/exams/${examId}/classes`, { classIds });
+  },
+
+  // Examination schedule (Step 6)
+  getExamSchedule(tenantId: string, examId: string): Promise<ExamScheduleRow[]> {
+    return apiGet(`/api/v1/tenants/${tenantId}/exams/${examId}/schedule`);
+  },
+  saveExamSchedule(tenantId: string, examId: string, req: UpsertScheduleRequest): Promise<ExamScheduleRow[]> {
+    return apiPut(`/api/v1/tenants/${tenantId}/exams/${examId}/schedule`, req);
+  },
+
+  // Admit-card planning
+  getEnrollmentSummary(tenantId: string, examId: string): Promise<ExamEnrollmentSummaryResponse> {
+    return apiGet(`/api/v1/tenants/${tenantId}/exams/${examId}/admit-cards/enrollment-summary`);
+  },
+  validateAdmitCards(tenantId: string, examId: string): Promise<AdmitCardValidationResponse> {
+    return apiGet(`/api/v1/tenants/${tenantId}/exams/${examId}/admit-cards/validate`);
   },
 
   // Exam structure (marking scheme)
@@ -87,6 +121,9 @@ export const academicsApi = {
   },
   getResults(tenantId: string, examId: string, sectionId: string): Promise<ExamResultResponse[]> {
     return apiGet(`/api/v1/tenants/${tenantId}/exams/${examId}/results/${sectionId}`);
+  },
+  verifyResults(tenantId: string, examId: string, sectionId: string): Promise<ExamResultResponse[]> {
+    return apiPost(`/api/v1/tenants/${tenantId}/exams/${examId}/results/verify/${sectionId}`);
   },
   publishResults(tenantId: string, examId: string, sectionId: string): Promise<ExamResultResponse[]> {
     return apiPost(`/api/v1/tenants/${tenantId}/exams/${examId}/results/publish/${sectionId}`);

@@ -31,7 +31,7 @@ const config: Config = {
         },
         // System colors — fixed; not branded.
         danger:  { DEFAULT: '#DC2626', soft: '#FEF2F2' },
-        warning: { DEFAULT: '#D97706', soft: '#FFFBEB' },
+        warning: { DEFAULT: '#F59E0B', soft: '#FFFBEB' },
         success: { DEFAULT: '#16A34A', soft: '#F0FDF4' },
         info:    { DEFAULT: '#0EA5E9', soft: '#F0F9FF' },
       },

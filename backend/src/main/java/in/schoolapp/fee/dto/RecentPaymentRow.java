@@ -17,5 +17,7 @@ public record RecentPaymentRow(
     PaymentMode paymentMode,
     String receiptNumber,
     String receiptPdfUrl,
-    LocalDate paymentDate
+    LocalDate paymentDate,
+    /** Name of the staff member (accountant/cashier) who collected this payment. */
+    String collectedByName
 ) {}

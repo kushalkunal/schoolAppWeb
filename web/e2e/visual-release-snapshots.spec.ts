@@ -200,19 +200,22 @@ test.describe('CLASS_TEACHER snapshots', () => {
     await snap(page, 'class_teacher', '03-attendance');
   });
 
-  test('class teacher – library books (read only)', async ({ page }) => {
+  // Library is out of a class teacher's scope (see src/auth/routeAccess.ts) — they're redirected
+  // away. Snapshot the screens that ARE in their scope instead: My Classes and Homework.
+  test('class teacher – academics / my classes', async ({ page }) => {
     await loginAs(page, TEACHER);
-    await page.goto(`${TENANT_URL}/library/books`);
-    await expect(page.getByText('The Jungle Book')).toBeVisible({ timeout: 15_000 });
-    await snap(page, 'class_teacher', '04-library-books-readonly');
-  });
-
-  test('class teacher – library issues (read only)', async ({ page }) => {
-    await loginAs(page, TEACHER);
-    await page.goto(`${TENANT_URL}/library/issues`);
+    await page.goto(`${TENANT_URL}/academics/my-classes`);
     await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(2_000);
-    await snap(page, 'class_teacher', '05-library-issues-readonly');
+    await snap(page, 'class_teacher', '04-my-classes');
+  });
+
+  test('class teacher – homework', async ({ page }) => {
+    await loginAs(page, TEACHER);
+    await page.goto(`${TENANT_URL}/homework`);
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(2_000);
+    await snap(page, 'class_teacher', '05-homework');
   });
 });
 

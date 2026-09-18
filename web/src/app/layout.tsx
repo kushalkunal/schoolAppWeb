@@ -25,13 +25,13 @@ export const metadata: Metadata = {
   },
   formatDetection: { telephone: false },
   icons: [
-    { rel: 'icon', url: DEFAULT_BRANDING.faviconUrl },
-    { rel: 'apple-touch-icon', url: '/brand/icon-192.png' },
+    { rel: 'icon', url: DEFAULT_BRANDING.faviconUrl, type: 'image/svg+xml' },
+    { rel: 'apple-touch-icon', url: '/brand/logo.svg' },
   ],
 };
 
 export const viewport = {
-  themeColor: '#4f46e5',
+  themeColor: '#B00000',
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',

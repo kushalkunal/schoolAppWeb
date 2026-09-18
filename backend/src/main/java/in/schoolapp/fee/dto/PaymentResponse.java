@@ -17,9 +17,16 @@ public record PaymentResponse(
     String receiptPdfUrl,
     LocalDate paymentDate,
     long outstandingBalancePaise,
-    OffsetDateTime createdAt
+    OffsetDateTime createdAt,
+    UUID collectedById,
+    /** Name of the staff member (accountant/cashier) who collected this payment. */
+    String collectedByName
 ) {
     public static PaymentResponse from(FeePayment p, long studentOutstandingPaise) {
+        return from(p, studentOutstandingPaise, null);
+    }
+
+    public static PaymentResponse from(FeePayment p, long studentOutstandingPaise, String collectedByName) {
         return new PaymentResponse(
             p.getId(),
             p.getStudentId(),
@@ -30,7 +37,9 @@ public record PaymentResponse(
             p.getReceiptPdfUrl(),
             p.getPaymentDate(),
             studentOutstandingPaise,
-            p.getCreatedAt()
+            p.getCreatedAt(),
+            p.getCollectedById(),
+            collectedByName
         );
     }
 }

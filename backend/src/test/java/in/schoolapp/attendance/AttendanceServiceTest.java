@@ -53,7 +53,6 @@ class AttendanceServiceTest {
     @Mock ApplicationEventPublisher events;
     @Mock in.schoolapp.calendar.SchoolCalendarService calendarService;
     @Mock in.schoolapp.timetable.repository.TimetableSubstitutionRepository substitutionRepository;
-    @Mock in.schoolapp.timetable.repository.TimetablePeriodRepository periodRepository;
 
     @InjectMocks
     AttendanceService service;
@@ -182,16 +181,13 @@ class AttendanceServiceTest {
         @Test
         void substitute_withActiveSubstitution_canSubmit() {
             UUID sub = UUID.randomUUID();   // a substitute, NOT the section's class teacher
-            UUID periodId = UUID.randomUUID();
             TenantContext.set(tenantId, sub, "SUBJECT_TEACHER");
             when(classSectionService.getSectionOrThrow(tenantId, sectionId)).thenReturn(section);
 
             var subst = new in.schoolapp.timetable.entity.TimetableSubstitution();
-            subst.setSchoolId(tenantId); subst.setSectionId(sectionId); subst.setPeriodId(periodId);
+            subst.setSchoolId(tenantId); subst.setSectionId(sectionId); subst.setPeriodId(UUID.randomUUID());
             subst.setSubstituteTeacherId(sub);
             when(substitutionRepository.findBySubstituteTeacherIdAndDate(sub, today)).thenReturn(List.of(subst));
-            var period = new in.schoolapp.timetable.entity.TimetablePeriod();   // no time bounds → valid all day
-            when(periodRepository.findById(periodId)).thenReturn(Optional.of(period));
 
             lenient().when(lockRepository.existsBySectionIdAndDate(sectionId, today)).thenReturn(false);
             lenient().when(lockRepository.findBySectionIdAndDate(sectionId, today)).thenReturn(Optional.empty());

@@ -79,9 +79,20 @@ const env = (key: string, fallback: string): string =>
  * deploy at this repo, fill in NEXT_PUBLIC_BRAND_* in their .env.production, hit
  * `next build`, and they get their own branded build.
  */
+/**
+ * The platform (white-label provider) identity. School branding always leads; this
+ * Scalio attribution is small and unobtrusive — login footer, system footer, billing,
+ * help/about only. Never on documents or in place of a school's own branding.
+ */
+export const PLATFORM = {
+  name: 'Scalio Edu',
+  company: 'Scalio Lab',
+  poweredBy: 'Powered by Scalio Edu',
+} as const;
+
 export const DEFAULT_BRANDING: Branding = {
-  schoolName:    env('NEXT_PUBLIC_BRAND_SCHOOL_NAME',  'SchoolApp Demo'),
-  shortName:     env('NEXT_PUBLIC_BRAND_SHORT_NAME',   'SchoolApp'),
+  schoolName:    env('NEXT_PUBLIC_BRAND_SCHOOL_NAME',  'Scalio Edu'),
+  shortName:     env('NEXT_PUBLIC_BRAND_SHORT_NAME',   'Scalio Edu'),
   tagline:       env('NEXT_PUBLIC_BRAND_TAGLINE',      'Modern school operations, simplified.'),
   affiliation:   env('NEXT_PUBLIC_BRAND_AFFILIATION',  ''),
 
@@ -90,8 +101,8 @@ export const DEFAULT_BRANDING: Branding = {
   faviconUrl:    env('NEXT_PUBLIC_BRAND_FAVICON',      '/favicon.svg'),
   loginHeroUrl:  env('NEXT_PUBLIC_BRAND_LOGIN_HERO',   ''),
 
-  primaryColor:  env('NEXT_PUBLIC_BRAND_PRIMARY',      '#4f46e5'),  // indigo-600
-  accentColor:   env('NEXT_PUBLIC_BRAND_ACCENT',       '#10b981'),  // emerald-500
+  primaryColor:  env('NEXT_PUBLIC_BRAND_PRIMARY',      '#B00000'),  // Scalio Edu red
+  accentColor:   env('NEXT_PUBLIC_BRAND_ACCENT',       '#111827'),  // Scalio slate
   radius:        env('NEXT_PUBLIC_BRAND_RADIUS',       '0.625rem'),
 
   contactPhone:  env('NEXT_PUBLIC_BRAND_PHONE',        ''),

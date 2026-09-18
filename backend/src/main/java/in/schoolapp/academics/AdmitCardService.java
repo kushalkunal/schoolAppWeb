@@ -2,12 +2,22 @@ package in.schoolapp.academics;
 
 import in.schoolapp.academics.dto.AdmitCardDashboardResponse;
 import in.schoolapp.academics.dto.AdmitCardResponse;
+import in.schoolapp.academics.dto.AdmitCardValidationResponse;
+import in.schoolapp.academics.dto.ExamEnrollmentSummaryResponse;
+import in.schoolapp.academics.dto.ExamEnrollmentSummaryResponse.ClassCount;
 import in.schoolapp.academics.entity.AdmitCard;
 import in.schoolapp.academics.entity.AdmitCardStatus;
 import in.schoolapp.academics.entity.Exam;
+import in.schoolapp.academics.entity.ExamClass;
+import in.schoolapp.academics.entity.ExamScheduleEntry;
+import in.schoolapp.academics.entity.FeePolicy;
+import in.schoolapp.academics.entity.Subject;
 import in.schoolapp.academics.repository.AdmitCardRepository;
+import in.schoolapp.academics.repository.ExamClassRepository;
 import in.schoolapp.academics.repository.ExamRepository;
-import in.schoolapp.branding.BrandingService;
+import in.schoolapp.academics.repository.ExamScheduleRepository;
+import in.schoolapp.academics.repository.ExamSubjectConfigRepository;
+import in.schoolapp.academics.repository.SubjectRepository;
 import in.schoolapp.common.AppException;
 import in.schoolapp.common.ErrorCode;
 import in.schoolapp.documents.DocumentService;
@@ -29,7 +39,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -45,6 +57,10 @@ public class AdmitCardService {
 
     private final AdmitCardRepository admitCardRepository;
     private final ExamRepository examRepository;
+    private final ExamClassRepository examClassRepository;
+    private final ExamScheduleRepository scheduleRepository;
+    private final ExamSubjectConfigRepository subjectConfigRepository;
+    private final SubjectRepository subjectRepository;
     private final StudentRepository studentRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
     private final SchoolRepository schoolRepository;
@@ -52,8 +68,12 @@ public class AdmitCardService {
     private final SectionRepository sectionRepository;
     private final FeeInvoiceService feeInvoiceService;
     private final DocumentService documentService;
+    private final org.springframework.context.ApplicationEventPublisher events;
 
-    // â”€â”€ Dashboard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    private static final DateTimeFormatter D = DateTimeFormatter.ofPattern("dd MMM");
+    private static final DateTimeFormatter T = DateTimeFormatter.ofPattern("HH:mm");
+
+    // ── Dashboard ────────────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
     public AdmitCardDashboardResponse getDashboard(UUID tenantId, UUID examId) {
@@ -66,7 +86,46 @@ public class AdmitCardService {
         return new AdmitCardDashboardResponse(total, generated, downloaded, blocked, pending);
     }
 
-    // â”€â”€ List â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Auto-enrollment preview ──────────────────────────────────────────────
+
+    /** How many active students each participating class contributes (Step 4: auto-enrollment). */
+    @Transactional(readOnly = true)
+    public ExamEnrollmentSummaryResponse enrollmentSummary(UUID tenantId, UUID examId) {
+        Exam exam = requireExam(tenantId, examId);
+        List<UUID> classIds = participatingClassIds(exam);
+        List<ClassCount> counts = new ArrayList<>();
+        int total = 0;
+        for (UUID classId : classIds) {
+            SchoolClass cls = schoolClassRepository.findById(classId).orElse(null);
+            int n = activeEnrollmentsForClass(classId, exam.getAcademicYearId()).size();
+            total += n;
+            counts.add(new ClassCount(classId, cls != null ? cls.getName() : "—", n));
+        }
+        return new ExamEnrollmentSummaryResponse(total, counts);
+    }
+
+    // ── Pre-flight validation (Step 9) ───────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public AdmitCardValidationResponse validate(UUID tenantId, UUID examId) {
+        Exam exam = requireExam(tenantId, examId);
+        List<UUID> classIds = participatingClassIds(exam);
+        boolean hasClasses = !classIds.isEmpty();
+        int activeStudents = resolveEnrollments(exam).size();
+        boolean hasSubjects = !subjectConfigRepository.findByExamIdOrderBySubjectIdAscSortOrderAsc(examId).isEmpty();
+        boolean hasSchedule = !scheduleRepository.findByExamIdOrderByExamDateAscStartTimeAsc(examId).isEmpty();
+
+        List<String> warnings = new ArrayList<>();
+        if (!hasClasses) warnings.add("No participating classes selected.");
+        if (activeStudents == 0) warnings.add("No active students found in the participating classes.");
+        if (!hasSubjects) warnings.add("Subjects & marks are not configured for this exam.");
+        if (!hasSchedule) warnings.add("Examination schedule is not set — admit cards will omit the subject timetable.");
+
+        boolean ready = hasClasses && activeStudents > 0;
+        return new AdmitCardValidationResponse(ready, activeStudents, hasClasses, hasSubjects, hasSchedule, warnings);
+    }
+
+    // ── List ─────────────────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
     public List<AdmitCardResponse> listForExam(UUID tenantId, UUID examId, String statusFilter) {
@@ -82,19 +141,16 @@ public class AdmitCardService {
 
         if (cards.isEmpty()) return List.of();
 
-        // Bulk-load students + enrollments for display
         List<UUID> studentIds = cards.stream().map(AdmitCard::getStudentId).toList();
         Map<UUID, Student> studentsById = studentRepository.findAllById(studentIds)
             .stream().collect(Collectors.toMap(Student::getId, Function.identity()));
 
-        // Load enrollments per student (latest active)
         Map<UUID, StudentEnrollment> enrollments = studentIds.stream()
             .flatMap(sid -> enrollmentRepository.findByStudentIdOrderByCreatedAtDesc(sid).stream()
                 .filter(e -> e.getStatus() == EnrollmentStatus.ACTIVE)
                 .limit(1))
-            .collect(Collectors.toMap(e -> e.getStudentId(), Function.identity(), (a, b) -> a));
+            .collect(Collectors.toMap(StudentEnrollment::getStudentId, Function.identity(), (a, b) -> a));
 
-        // Collect the unique sectionIds to load only those sections + their classes
         java.util.Set<UUID> sectionIds = enrollments.values().stream()
             .map(StudentEnrollment::getSectionId).collect(Collectors.toSet());
         Map<UUID, Section> sections = sectionRepository.findAllById(sectionIds)
@@ -108,11 +164,9 @@ public class AdmitCardService {
             Student student = studentsById.get(card.getStudentId());
             StudentEnrollment enrollment = enrollments.get(card.getStudentId());
 
-            String studentName = student != null ? student.displayName() : "â€”";
+            String studentName = student != null ? student.displayName() : "—";
             String admissionNumber = student != null ? student.getAdmissionNumber() : null;
-
-            String className = null;
-            String sectionName = null;
+            String className = null, sectionName = null;
             Integer rollNumber = null;
 
             if (enrollment != null) {
@@ -124,46 +178,31 @@ public class AdmitCardService {
                     if (cls != null) className = cls.getName();
                 }
             }
-
             return AdmitCardResponse.from(card, studentName, admissionNumber, className, sectionName, rollNumber);
         }).toList();
     }
 
-    // â”€â”€ Bulk generate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Bulk generate ────────────────────────────────────────────────────────
 
     /**
-     * Generate admit cards for all active students enrolled in the exam's section (or class,
-     * if the exam is not section-scoped). Idempotent: already-generated cards are skipped,
-     * BLOCKED cards are re-evaluated in case fees have been paid.
+     * Generate admit cards for all active students across the exam's participating classes
+     * (or its legacy section/class scope). Idempotent — already-generated cards are skipped and
+     * BLOCKED cards are re-evaluated. The exam's {@link FeePolicy} decides whether dues withhold.
      */
     @Transactional
     public int generateForExam(UUID tenantId, UUID examId) {
         Exam exam = requireExam(tenantId, examId);
-
-        // Find the section scope
-        if (exam.getSectionId() == null && exam.getClassId() == null) {
-            throw new AppException(ErrorCode.VALIDATION_ERROR, "Exam has no class/section scope â€” cannot bulk-generate admit cards");
-        }
-
-        List<StudentEnrollment> enrollments;
-        if (exam.getSectionId() != null) {
-            enrollments = enrollmentRepository.findBySectionIdAndStatus(exam.getSectionId(), EnrollmentStatus.ACTIVE);
-        } else {
-            // Class-wide exam: collect all sections of this class
-            List<Section> sections = sectionRepository.findByClassIdAndAcademicYearIdOrderByName(
-                exam.getClassId(), exam.getAcademicYearId());
-            enrollments = sections.stream()
-                .flatMap(s -> enrollmentRepository.findBySectionIdAndStatus(s.getId(), EnrollmentStatus.ACTIVE).stream())
-                .toList();
+        List<StudentEnrollment> enrollments = resolveEnrollments(exam);
+        if (enrollments.isEmpty()) {
+            throw new AppException(ErrorCode.VALIDATION_ERROR,
+                "No active students — select participating classes (or a class/section) first.");
         }
 
         int generated = 0;
         for (StudentEnrollment enrollment : enrollments) {
             try {
-                AdmitCardStatus prev = generateOrUpdate(tenantId, exam, enrollment.getStudentId());
-                if (prev != AdmitCardStatus.GENERATED && prev != AdmitCardStatus.DOWNLOADED) {
-                    generated++;
-                }
+                AdmitCardStatus prev = generateOrUpdate(tenantId, exam, enrollment.getStudentId(), false);
+                if (prev != AdmitCardStatus.GENERATED && prev != AdmitCardStatus.DOWNLOADED) generated++;
             } catch (Exception ex) {
                 log.warn("Admit card generation failed for student {} exam {}: {}", enrollment.getStudentId(), examId, ex.getMessage());
             }
@@ -172,29 +211,22 @@ public class AdmitCardService {
         return generated;
     }
 
-    /**
-     * Generate / regenerate a single student's admit card.
-     */
+    /** Generate / regenerate a single student's admit card. {@code force} honours an OVERRIDE policy. */
     @Transactional
-    public AdmitCardResponse generateForStudent(UUID tenantId, UUID examId, UUID studentId) {
+    public AdmitCardResponse generateForStudent(UUID tenantId, UUID examId, UUID studentId, boolean force) {
         Exam exam = requireExam(tenantId, examId);
-        generateOrUpdate(tenantId, exam, studentId);
+        generateOrUpdate(tenantId, exam, studentId, force);
         AdmitCard card = admitCardRepository.findByExamIdAndStudentId(examId, studentId)
             .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Admit card not found after generation"));
         return buildResponse(card);
     }
 
-    /**
-     * After a fee payment, re-check all BLOCKED cards for this student and regenerate them.
-     */
     @Transactional
     public void recheckAfterFeePayment(UUID studentId) {
         List<AdmitCard> blocked = admitCardRepository.findBlockedByStudent(studentId);
         if (blocked.isEmpty()) return;
-
         long outstanding = feeInvoiceService.getOutstanding(studentId);
-        if (outstanding > 0) return; // still has dues
-
+        if (outstanding > 0) return;
         for (AdmitCard card : blocked) {
             Exam exam = examRepository.findById(card.getExamId()).orElse(null);
             if (exam == null) continue;
@@ -208,14 +240,13 @@ public class AdmitCardService {
         }
     }
 
-    // â”€â”€ Download (marks as DOWNLOADED) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Download ───────────────────────────────────────────────────────────
 
     @Transactional
     public AdmitCardResponse markDownloaded(UUID tenantId, UUID admitCardId) {
         AdmitCard card = admitCardRepository.findById(admitCardId)
             .filter(c -> c.getSchoolId().equals(tenantId))
             .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Admit card not found"));
-
         if (card.getStatus() == AdmitCardStatus.GENERATED) {
             card.setStatus(AdmitCardStatus.DOWNLOADED);
             admitCardRepository.save(card);
@@ -223,10 +254,39 @@ public class AdmitCardService {
         return buildResponse(card);
     }
 
-    // â”€â”€ Internal helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Enrollment resolution ────────────────────────────────────────────────
+
+    /** Participating classes: exam_classes if set, else the legacy single class_id. */
+    private List<UUID> participatingClassIds(Exam exam) {
+        List<UUID> ids = examClassRepository.findByExamId(exam.getId()).stream()
+            .map(ExamClass::getClassId).toList();
+        if (!ids.isEmpty()) return ids;
+        return exam.getClassId() != null ? List.of(exam.getClassId()) : List.of();
+    }
+
+    /** All active enrollments in scope: the exam's section, else every section of every participating class. */
+    private List<StudentEnrollment> resolveEnrollments(Exam exam) {
+        if (exam.getSectionId() != null) {
+            return enrollmentRepository.findBySectionIdAndStatus(exam.getSectionId(), EnrollmentStatus.ACTIVE);
+        }
+        List<UUID> classIds = participatingClassIds(exam);
+        List<StudentEnrollment> all = new ArrayList<>();
+        for (UUID classId : classIds) {
+            all.addAll(activeEnrollmentsForClass(classId, exam.getAcademicYearId()));
+        }
+        return all;
+    }
+
+    private List<StudentEnrollment> activeEnrollmentsForClass(UUID classId, UUID academicYearId) {
+        return sectionRepository.findByClassIdAndAcademicYearIdOrderByName(classId, academicYearId).stream()
+            .flatMap(s -> enrollmentRepository.findBySectionIdAndStatus(s.getId(), EnrollmentStatus.ACTIVE).stream())
+            .toList();
+    }
+
+    // ── Internal helpers ─────────────────────────────────────────────────────
 
     /** Returns the PREVIOUS status so caller can count net-new generations. */
-    private AdmitCardStatus generateOrUpdate(UUID tenantId, Exam exam, UUID studentId) {
+    private AdmitCardStatus generateOrUpdate(UUID tenantId, Exam exam, UUID studentId, boolean force) {
         Optional<AdmitCard> existing = admitCardRepository.findByExamIdAndStudentId(exam.getId(), studentId);
         AdmitCard card = existing.orElseGet(() -> {
             AdmitCard c = new AdmitCard();
@@ -237,18 +297,20 @@ public class AdmitCardService {
         });
 
         AdmitCardStatus prev = card.getStatus();
+        if (prev == AdmitCardStatus.GENERATED || prev == AdmitCardStatus.DOWNLOADED) return prev;
 
-        // Skip if already generated/downloaded (idempotent)
-        if (prev == AdmitCardStatus.GENERATED || prev == AdmitCardStatus.DOWNLOADED) {
-            return prev;
-        }
-
-        // Fee clearance check
         long outstanding = feeInvoiceService.getOutstanding(studentId);
         card.setOutstandingPaiseSnapshot(outstanding);
         card.setFeeCleared(outstanding == 0);
 
-        if (outstanding > 0) {
+        FeePolicy policy = exam.getFeePolicy() == null ? FeePolicy.BLOCK : exam.getFeePolicy();
+        boolean withhold = outstanding > 0 && switch (policy) {
+            case ALLOW -> false;
+            case BLOCK -> true;
+            case OVERRIDE -> !force; // bulk withholds; a per-student force-issue overrides
+        };
+
+        if (withhold) {
             card.setStatus(AdmitCardStatus.BLOCKED);
             admitCardRepository.save(card);
             return prev;
@@ -259,7 +321,6 @@ public class AdmitCardService {
     }
 
     private void generatePdfAndUpdateCard(UUID tenantId, Exam exam, AdmitCard card, UUID studentId) {
-        // Resolve student + enrollment for seat number assignment
         Student student = studentRepository.findById(studentId).orElse(null);
         StudentEnrollment enrollment = enrollmentRepository
             .findByStudentIdOrderByCreatedAtDesc(studentId)
@@ -269,17 +330,14 @@ public class AdmitCardService {
         SchoolClass schoolClass = section != null ? schoolClassRepository.findById(section.getClassId()).orElse(null) : null;
         var school = schoolRepository.findById(tenantId).orElse(null);
 
-        // Assign admit card number and seat
         if (card.getAdmitCardNo() == null) {
-            String admitNo = "AC-" + exam.getId().toString().substring(0, 8).toUpperCase()
-                + "-" + studentId.toString().substring(0, 6).toUpperCase();
-            card.setAdmitCardNo(admitNo);
+            card.setAdmitCardNo("AC-" + exam.getId().toString().substring(0, 8).toUpperCase()
+                + "-" + studentId.toString().substring(0, 6).toUpperCase());
         }
         if (card.getSeatNumber() == null && enrollment != null && enrollment.getRollNumber() != null) {
             card.setSeatNumber(String.valueOf(enrollment.getRollNumber()));
         }
 
-        // Build Thymeleaf model (mirrors hall_ticket.html variables)
         Map<String, Object> model = new java.util.HashMap<>();
         model.put("school", school);
         model.put("exam", exam);
@@ -287,7 +345,7 @@ public class AdmitCardService {
         model.put("enrollment", buildEnrollmentView(enrollment, schoolClass, section));
         model.put("seatNumber", card.getSeatNumber());
         model.put("admitCardNo", card.getAdmitCardNo());
-        model.put("schedule", List.of()); // can be populated later
+        model.put("schedule", buildScheduleView(exam.getId()));
 
         try {
             GeneratedDocument doc = documentService.generate(tenantId, DocumentType.HALL_TICKET, model);
@@ -298,8 +356,38 @@ public class AdmitCardService {
             log.error("PDF generation failed for admit card student={} exam={}: {}", studentId, exam.getId(), ex.getMessage());
             throw ex;
         }
-
         admitCardRepository.save(card);
+
+        // Notify the parent their admit card is ready (carries the exam schedule on the PDF).
+        events.publishEvent(new in.schoolapp.academics.event.AdmitCardReadyEvent(
+            tenantId, studentId, exam.getName(), card.getPdfUrl()));
+    }
+
+    /** Rows for the hall-ticket schedule table: {date, subject, time, duration}. */
+    private List<Map<String, String>> buildScheduleView(UUID examId) {
+        List<ExamScheduleEntry> entries = scheduleRepository.findByExamIdOrderByExamDateAscStartTimeAsc(examId);
+        if (entries.isEmpty()) return List.of();
+        Map<UUID, String> names = subjectRepository.findAllById(
+                entries.stream().map(ExamScheduleEntry::getSubjectId).toList()).stream()
+            .collect(Collectors.toMap(Subject::getId, Subject::getName, (a, b) -> a));
+        return entries.stream().map(e -> {
+            String time = "—";
+            String duration = "—";
+            if (e.getStartTime() != null) {
+                time = e.getEndTime() != null
+                    ? e.getStartTime().format(T) + " – " + e.getEndTime().format(T)
+                    : e.getStartTime().format(T);
+                if (e.getEndTime() != null) {
+                    long mins = Duration.between(e.getStartTime(), e.getEndTime()).toMinutes();
+                    duration = (mins / 60) + "h" + (mins % 60 == 0 ? "" : " " + (mins % 60) + "m");
+                }
+            }
+            return Map.of(
+                "date", e.getExamDate() != null ? e.getExamDate().format(D) : "—",
+                "subject", names.getOrDefault(e.getSubjectId(), "—"),
+                "time", time,
+                "duration", duration);
+        }).toList();
     }
 
     private record EnrollmentView(String className, String sectionName, Integer rollNumber) {}
@@ -309,8 +397,7 @@ public class AdmitCardService {
         return new EnrollmentView(
             cls != null ? cls.getName() : null,
             sec != null ? sec.getName() : null,
-            enrollment.getRollNumber()
-        );
+            enrollment.getRollNumber());
     }
 
     private AdmitCardResponse buildResponse(AdmitCard card) {
@@ -320,15 +407,13 @@ public class AdmitCardService {
             .stream().filter(e -> e.getStatus() == EnrollmentStatus.ACTIVE).findFirst().orElse(null);
         Section sec = enrollment != null ? sectionRepository.findById(enrollment.getSectionId()).orElse(null) : null;
         SchoolClass cls = sec != null ? schoolClassRepository.findById(sec.getClassId()).orElse(null) : null;
-
         return AdmitCardResponse.from(
             card,
-            student != null ? student.displayName() : "â€”",
+            student != null ? student.displayName() : "—",
             student != null ? student.getAdmissionNumber() : null,
             cls != null ? cls.getName() : null,
             sec != null ? sec.getName() : null,
-            enrollment != null ? enrollment.getRollNumber() : null
-        );
+            enrollment != null ? enrollment.getRollNumber() : null);
     }
 
     private Exam requireExam(UUID tenantId, UUID examId) {
@@ -336,4 +421,3 @@ public class AdmitCardService {
             .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Exam not found"));
     }
 }
-

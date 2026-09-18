@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.Month;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -59,5 +60,19 @@ public class AcademicYearService {
      *  a usable (empty) snapshot rather than a 404. */
     public Optional<AcademicYear> findCurrent(UUID schoolId) {
         return academicYearRepository.findBySchoolIdAndCurrentTrue(schoolId);
+    }
+
+    /** All academic sessions for the school, newest first — drives the session selectors. */
+    public List<AcademicYear> listForSchool(UUID schoolId) {
+        return academicYearRepository.findBySchoolIdOrderByStartDateDesc(schoolId);
+    }
+
+    /** Resolves a session id to the school's year, or falls back to the current year. */
+    public AcademicYear resolveOrCurrent(UUID schoolId, UUID academicYearId) {
+        if (academicYearId == null) return getCurrentOrThrow(schoolId);
+        return academicYearRepository.findById(academicYearId)
+            .filter(y -> schoolId.equals(y.getSchoolId()))
+            .orElseThrow(() -> new AppException(ErrorCode.ACADEMIC_YEAR_NOT_FOUND,
+                "Academic session not found for this school"));
     }
 }

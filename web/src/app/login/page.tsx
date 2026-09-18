@@ -4,13 +4,13 @@ import { FormEvent, Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ShieldCheck, Mail, Phone, ArrowLeft,
-  KeyRound, Smartphone, Eye, EyeOff,
-  GraduationCap, BookOpen, Pencil, Atom, FlaskConical,
-  Calculator, Ruler, Music, Star, Trophy, Globe, Microscope, PenLine,
+  KeyRound, Smartphone, Eye, EyeOff, CheckCircle2,
 } from 'lucide-react';
 import { useAuth, SendOtpInput, VerifyOtpInput, PasswordLoginInput } from '@/auth/AuthProvider';
 import { isApiError } from '@/api/errors';
 import { useBranding } from '@/brand/BrandingProvider';
+import { PLATFORM } from '@/brand/branding.config';
+import { resolveTenantSlug } from '@/lib/tenantSlug';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
 
@@ -53,14 +53,15 @@ function LoginInner() {
     try {
       const input: PasswordLoginInput = { ...idPayload(), password };
       const { claims, mustResetPassword } = await loginWithPassword(input);
+      const slug = await resolveTenantSlug(claims.tenantId);
       if (mustResetPassword) {
         router.replace(
           `/set-password?required=true&redirect=${encodeURIComponent(
-            sanitizeRedirect(searchParams.get('redirect'), claims.tenantId),
+            sanitizeRedirect(searchParams.get('redirect'), slug),
           )}`,
         );
       } else {
-        router.replace(sanitizeRedirect(searchParams.get('redirect'), claims.tenantId));
+        router.replace(sanitizeRedirect(searchParams.get('redirect'), slug));
       }
     } catch (err) {
       setError(isApiError(err) ? err.message : 'Sign-in failed');
@@ -89,7 +90,8 @@ function LoginInner() {
     setLoading(true);
     try {
       const claims = await loginWithOtp({ ...idPayload(), otp } as VerifyOtpInput);
-      router.replace(sanitizeRedirect(searchParams.get('redirect'), claims.tenantId));
+      const slug = await resolveTenantSlug(claims.tenantId);
+      router.replace(sanitizeRedirect(searchParams.get('redirect'), slug));
     } catch (err) {
       setError(isApiError(err) ? err.message : 'Verification failed');
     } finally {
@@ -97,56 +99,62 @@ function LoginInner() {
     }
   }
 
+  const year = new Date().getFullYear();
   return (
-    <main
-      className="min-h-dvh relative flex flex-col items-center justify-center overflow-hidden px-4 py-10"
-      style={{ background: 'linear-gradient(135deg, #8B82F6 0%, #A97FEA 40%, #5CC8F8 100%)' }}
-    >
-      {/* â”€â”€ Education-themed floating background decorations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-      <div className="pointer-events-none select-none" aria-hidden>
-        {/* Soft grid */}
-        <div
-          className="absolute inset-0 opacity-[0.07]"
-          style={{ backgroundImage: 'linear-gradient(white 1px,transparent 1px),linear-gradient(90deg,white 1px,transparent 1px)', backgroundSize: '48px 48px' }}
-        />
-        {/* Top row */}
-        <GraduationCap size={180} className="absolute -top-8    -left-12    text-white opacity-[0.15] rotate-[-14deg]" />
-        <BookOpen      size={120} className="absolute  top-4     right-2     text-white opacity-[0.13] rotate-[10deg]" />
-        <Star          size={70}  className="absolute  top-14    left-[34%]  text-white opacity-[0.13] rotate-[20deg]" />
-        <Ruler         size={90}  className="absolute  top-6     left-[56%]  text-white opacity-[0.12] rotate-[-30deg]" />
-        {/* Middle row */}
-        <Pencil        size={110} className="absolute  top-1/3   -left-6     text-white opacity-[0.13] rotate-[22deg]" />
-        <Atom          size={130} className="absolute  top-1/3   -right-4    text-white opacity-[0.12] rotate-[-8deg]" />
-        <Calculator    size={85}  className="absolute  top-[45%] left-[12%]  text-white opacity-[0.11]" />
-        <Music         size={75}  className="absolute  top-[42%] right-[15%] text-white opacity-[0.12] rotate-[12deg]" />
-        {/* Lower-middle row */}
-        <FlaskConical  size={95}  className="absolute  bottom-1/3  -left-4   text-white opacity-[0.13] rotate-[8deg]" />
-        <Globe         size={100} className="absolute  bottom-1/3   right-2  text-white opacity-[0.12] rotate-[-5deg]" />
-        <Microscope    size={80}  className="absolute  bottom-[28%] left-[41%] text-white opacity-[0.11]" />
-        <Trophy        size={70}  className="absolute  bottom-[36%] left-[23%] text-white opacity-[0.12] rotate-[-18deg]" />
-        {/* Bottom row */}
-        <PenLine       size={90}  className="absolute  bottom-16  -left-3    text-white opacity-[0.13] rotate-[15deg]" />
-        <BookOpen      size={85}  className="absolute  bottom-8    right-5   text-white opacity-[0.12] rotate-[-20deg]" />
-        <GraduationCap size={75}  className="absolute  bottom-6    left-1/2  text-white opacity-[0.11] rotate-[8deg]" />
-        {/* Glowing orbs */}
-        <div className="absolute -top-20   -left-20   w-80 h-80 rounded-full bg-white/20 blur-3xl" />
-        <div className="absolute -bottom-16 -right-16  w-72 h-72 rounded-full bg-white/20 blur-3xl" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full bg-white/5 blur-3xl" />
-      </div>
-      {/* â”€â”€ Product wordmark â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-      <div className="relative z-10 flex items-center gap-2.5 mb-8">
-        <div className="h-10 w-10 rounded-2xl bg-white/20 backdrop-blur-sm grid place-items-center shadow-lg">
-          <GraduationCap size={20} className="text-white" />
+    <main className="min-h-dvh flex bg-white">
+      {/* â”€â”€ LEFT brand panel (desktop) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      <aside
+        className="relative hidden lg:flex lg:w-1/2 flex-col justify-between overflow-hidden p-12 text-white"
+        style={{ background: 'linear-gradient(150deg, var(--brand-primary) 0%, #7d0000 55%, #4a0000 100%)' }}
+      >
+        <div aria-hidden className="pointer-events-none absolute inset-0 opacity-[0.07]"
+          style={{ backgroundImage: 'linear-gradient(white 1px,transparent 1px),linear-gradient(90deg,white 1px,transparent 1px)', backgroundSize: '44px 44px' }} />
+        <div aria-hidden className="pointer-events-none absolute -top-24 -left-24 h-96 w-96 rounded-full bg-white/10 blur-3xl" />
+        <div aria-hidden className="pointer-events-none absolute -bottom-24 -right-16 h-80 w-80 rounded-full bg-white/10 blur-3xl" />
+
+        <div className="relative z-10 flex items-center gap-3">
+          <div className="h-11 w-11 rounded-2xl bg-white grid place-items-center shadow-lg p-1.5">
+            <img src="/brand/logo.svg" alt={`${PLATFORM.name} logo`} className="h-full w-full object-contain" />
+          </div>
+          <span className="font-extrabold text-2xl tracking-tight">{PLATFORM.name}</span>
         </div>
-        <span className="text-white font-extrabold text-2xl tracking-tight">Vidya</span>
-      </div>
 
-      {/* â”€â”€ Login card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-      <div className="relative z-10 w-full max-w-sm bg-white/95 backdrop-blur-md rounded-3xl shadow-2xl overflow-hidden">
-        {/* Coloured top accent bar */}
-        <div className="h-1 w-full bg-brand-gradient" />
+        <div className="relative z-10 max-w-md">
+          <h2 className="text-4xl font-extrabold leading-[1.1] tracking-tight">
+            The operating system for your school.
+          </h2>
+          <p className="mt-4 text-white/70 text-base leading-relaxed">
+            Admissions, attendance, exams, fees and communication — one secure, premium platform for every role.
+          </p>
+          <ul className="mt-8 space-y-3 text-sm text-white/85">
+            {[
+              'Role dashboards for principals, teachers & accountants',
+              'Exams, admit cards & results — end to end',
+              'Fee collection, receipts & defaulter tracking',
+            ].map((t) => (
+              <li key={t} className="flex items-center gap-2.5">
+                <CheckCircle2 size={16} className="shrink-0 text-white/90" /> {t}
+              </li>
+            ))}
+          </ul>
+        </div>
 
-        <div className="px-7 pt-7 pb-8">
+        <p className="relative z-10 text-xs text-white/50">
+          {PLATFORM.poweredBy} &middot; &copy; {year} {PLATFORM.company}
+        </p>
+      </aside>
+
+      {/* â”€â”€ RIGHT form column â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      <div className="flex-1 flex flex-col min-h-dvh">
+        <div className="flex-1 flex items-center justify-center px-5 py-10">
+          <div className="w-full max-w-sm">
+            {/* Compact brand header — shown when the left panel is hidden */}
+            <div className="mb-8 flex items-center gap-2.5 lg:hidden">
+              <div className="h-10 w-10 rounded-xl bg-primary grid place-items-center shadow p-1.5">
+                <img src="/brand/logo.svg" alt={`${PLATFORM.name} logo`} className="h-full w-full object-contain" />
+              </div>
+              <span className="font-extrabold text-xl tracking-tight text-slate-900">{PLATFORM.name}</span>
+            </div>
 
           {/* Heading */}
           <div className="mb-6">
@@ -313,13 +321,13 @@ function LoginInner() {
               </button>
             </form>
           )}
+          </div>
         </div>
+        {/* Mobile footer attribution — the left brand panel carries this on desktop */}
+        <p className="lg:hidden pb-6 text-center text-[11px] text-slate-400">
+          {PLATFORM.poweredBy} &middot; &copy; {year} {PLATFORM.company}
+        </p>
       </div>
-
-      {/* Footer */}
-      <p className="relative z-10 mt-6 text-[11px] text-white/50 text-center">
-        &copy; {new Date().getFullYear()} Vidya &middot; Built for every school
-      </p>
     </main>
   );
 }
@@ -349,12 +357,16 @@ function SegTab({
   );
 }
 
-function sanitizeRedirect(raw: string | null, signedInTenantId: string): string {
-  const fallback = `/tenants/${signedInTenantId}/dashboard`;
-  if (!raw) return fallback;
-  if (!raw.startsWith('/') || raw.startsWith('//')) return fallback;
-  const m = raw.match(/^\/tenants\/([0-9a-f-]{36})(\/|$)/);
-  if (m && m[1] !== signedInTenantId) return fallback;
-  return raw;
+function sanitizeRedirect(raw: string | null, slug: string): string {
+  const fallback = `/tenants/${slug}/dashboard`;
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//')) return fallback;
+  // Only honour same-app tenant deep-links, and canonicalise their tenant segment to the slug
+  // (so a bookmarked URL carrying the old UUID lands on the clean slug instead).
+  const parts = raw.split('/');
+  if (parts[1] === 'tenants' && parts.length >= 3 && parts[2]) {
+    parts[2] = slug;
+    return parts.join('/');
+  }
+  return fallback;
 }
 

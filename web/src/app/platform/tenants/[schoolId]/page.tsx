@@ -12,7 +12,7 @@ import { ErrorBanner } from '@/components/ui/ErrorBanner';
 import { Spinner } from '@/components/ui/Spinner';
 import type { Plan, TenantProviderConfig } from '@/types/domain';
 
-const CONCERNS = ['WHATSAPP', 'EMAIL', 'PAYMENT', 'STORAGE', 'OCR', 'LLM'] as const;
+const CONCERNS = ['WHATSAPP', 'EMAIL', 'SMS', 'PUSH', 'PAYMENT', 'STORAGE', 'OCR', 'LLM'] as const;
 type Concern = (typeof CONCERNS)[number];
 
 export default function PlatformTenantDetailPage() {
@@ -286,7 +286,7 @@ function ProviderModal({ open, schoolId, concern, existing, onClose, onSuccess }
   onClose: () => void; onSuccess: () => void;
 }) {
   const [provider, setProvider] = useState(existing?.provider ?? '');
-  const [json, setJson] = useState(existing ? JSON.stringify(existing.config, null, 2) : '{\n  \n}');
+  const [json, setJson] = useState(existing ? JSON.stringify(existing.config, null, 2) : starterConfig(concern));
   const [parseError, setParseError] = useState<string | null>(null);
 
   const save = useMutation({
@@ -336,13 +336,30 @@ function ProviderModal({ open, schoolId, concern, existing, onClose, onSuccess }
 
 function defaultProviderPlaceholder(concern: Concern): string {
   switch (concern) {
-    case 'WHATSAPP': return 'WATI';
-    case 'EMAIL':    return 'SMTP';
+    case 'WHATSAPP': return 'WATI | TWILIO_WA | INTERAKT';
+    case 'EMAIL':    return 'SMTP | SES | SENDGRID';
+    case 'SMS':      return 'MSG91 | TWILIO | AWS_SNS';
+    case 'PUSH':     return 'FCM';
     case 'PAYMENT':  return 'STRIPE | RAZORPAY';
     case 'STORAGE':  return 'S3';
-    case 'OCR':      return 'TESSERACT | GOOGLE_VISION';
-    case 'LLM':      return 'OPENAI | ANTHROPIC';
+    case 'OCR':      return 'GOOGLE_CLOUD_VISION';
+    case 'LLM':      return 'OPENAI | ANTHROPIC | GEMINI';
   }
+}
+
+/** Starter config so the system admin sees exactly which keys to fill per channel. */
+function starterConfig(concern: Concern): string {
+  const t: Record<Concern, Record<string, string>> = {
+    WHATSAPP: { base_url: 'https://live-mt-server.wati.io/<accountId>', token: '' },
+    EMAIL:    { host: 'smtp.gmail.com', port: '587', username: '', password: '', from: '' },
+    SMS:      { auth_key: '', sender_id: '', route: '4' },
+    PUSH:     { project_id: '', service_account_json: '' },
+    PAYMENT:  { key_id: '', key_secret: '' },
+    STORAGE:  { bucket: '', region: 'auto', access_key: '', secret_key: '', endpoint: '' },
+    OCR:      { api_key: '' },
+    LLM:      { api_key: '', model: '' },
+  };
+  return JSON.stringify(t[concern], null, 2);
 }
 
 function ChangePlanModal({ open, schoolId, currentPlan, plans, onClose, onSuccess }: {

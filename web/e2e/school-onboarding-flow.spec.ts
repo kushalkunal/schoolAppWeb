@@ -89,6 +89,12 @@ const T = `/api/v1/tenants/${TENANT_ID}`; // base path for tenant-scoped routes
  * the running dev server was built with.
  */
 async function setupMocks(page: Page, jwt: string): Promise<void> {
+  // Catch-all, registered FIRST so it has the LOWEST priority: Playwright runs the most recently
+  // registered matching handler first, so every specific route below overrides this. Anything not
+  // mocked returns an empty success envelope instead of leaking to the real backend, where the
+  // fake-signature test JWT would 401 and bounce the SPA to /login.
+  await page.route(byPrefix('/api/v1/'), r => r.fulfill({ json: ok([]) }));
+
   // ── Auth ──
   await page.route(byPath('/api/v1/auth/otp/send'),
     r => r.fulfill({ json: ok({}) }));
@@ -117,9 +123,12 @@ async function setupMocks(page: Page, jwt: string): Promise<void> {
     r => r.fulfill({ json: ok({ complete: true }) }));
 
   // ── Per-school runtime branding (BrandingProvider in tenant layout) ──
+  // Public branding drives both the post-login slug (resolveTenantSlug) and the tenant layout's
+  // BrandingProvider. Match by prefix so it resolves whether the URL carries the id or the
+  // name-derived slug, and return a real name so the slug is deterministic ("e2e-test-school").
   await page.route(
-    byPath(`/api/v1/public/schools/${TENANT_ID}/branding`),
-    r => r.fulfill({ json: ok(null) }),
+    byPrefix('/api/v1/public/schools/'),
+    r => r.fulfill({ json: ok({ schoolName: 'E2E Test School', shortName: 'E2E Test School' }) }),
   );
 
   // ── Dashboard ──
@@ -184,7 +193,10 @@ async function setupMocks(page: Page, jwt: string): Promise<void> {
   // ── Section attendance (GET existing records / POST submit) ──
   await page.route(byPath(`${T}/sections/${SECTION_ID}/attendance`), r => {
     if (r.request().method() === 'GET')
-      return r.fulfill({ json: ok([]) }); // no records yet → defaults everyone to PRESENT
+      // AttendanceSectionResponse is an object with a `records` array — an empty array of records
+      // means the marker defaults everyone to PRESENT. (Returning a bare [] crashes the page,
+      // which reads `data.records`.)
+      return r.fulfill({ json: ok({ sectionId: SECTION_ID, date: TODAY, locked: false, lockedByName: null, lockedAt: null, records: [] }) });
     if (r.request().method() === 'POST')
       return r.fulfill({ json: ok({ sectionId: SECTION_ID, date: TODAY, totalStudents: 1, notificationsQueued: 1 }) });
     return r.continue();
@@ -252,7 +264,8 @@ test.describe('Full school onboarding flow', () => {
     await page.getByRole('button', { name: /set password & go to dashboard/i }).click();
 
     // ── Redirected to tenant dashboard ──
-    await expect(page).toHaveURL(new RegExp(`/tenants/${TENANT_ID}/dashboard`), { timeout: 10_000 });
+    // URL carries the cosmetic, name-derived slug (e.g. /tenants/e2e-test-school/dashboard), not the id.
+    await expect(page).toHaveURL(/\/tenants\/[^/]+\/dashboard/, { timeout: 10_000 });
   });
 
   // ── 2. Admin login ──────────────────────────────────────────────────────────
@@ -269,7 +282,8 @@ test.describe('Full school onboarding flow', () => {
     await page.locator('input[type="password"]').fill('SecurePass@1');
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 
-    await expect(page).toHaveURL(new RegExp(`/tenants/${TENANT_ID}/dashboard`), { timeout: 10_000 });
+    // URL carries the cosmetic, name-derived slug (e.g. /tenants/e2e-test-school/dashboard), not the id.
+    await expect(page).toHaveURL(/\/tenants\/[^/]+\/dashboard/, { timeout: 10_000 });
   });
 
   // ── 3. Student registration ─────────────────────────────────────────────────
@@ -357,19 +371,10 @@ test.describe('Full school onboarding flow', () => {
     await setupMocks(page, TEACHER_JWT);
     await seedAuth(page, TEACHER_JWT);
 
-    // ── Attendance home: teacher sees "My sections" ──
+    // ── Attendance: a class teacher with exactly one assigned section is auto-redirected straight
+    //    to that section's marker (the A7 shortcut), skipping the intermediate section list. ──
     await page.goto(`/tenants/${TENANT_ID}/attendance`);
-    await expect(page.getByRole('heading', { name: 'Attendance' })).toBeVisible();
-    await expect(page.getByText('Your assigned sections.')).toBeVisible();
-
-    // Teacher's section displayed as "Section A"
-    await expect(page.getByText('Section A')).toBeVisible();
-
-    // Click "Mark attendance →" link for the section
-    await page.getByRole('link', { name: /mark attendance/i }).click();
-
-    // ── Section attendance page ──
-    await expect(page).toHaveURL(new RegExp(`/attendance/${SECTION_ID}`));
+    await expect(page).toHaveURL(new RegExp(`/attendance/${SECTION_ID}`), { timeout: 10_000 });
     await expect(page.getByRole('heading', { name: 'Section attendance' })).toBeVisible();
 
     // Ravi Kumar appears, defaulted to PRESENT (green chip for first mark)

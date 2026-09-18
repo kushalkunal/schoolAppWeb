@@ -35,11 +35,13 @@ export default function MarksEntryPage() {
     enabled: !!tenantId,
   });
 
+  // Preselect from ?sectionId= (deep-link from "My Classes"); else fall back to the first section.
   useEffect(() => {
-    if (!sectionId && classesQ.data?.length) {
-      const first = classesQ.data.flatMap(c => c.sections)[0];
-      if (first) setSectionId(first.id);
-    }
+    if (sectionId || !classesQ.data?.length) return;
+    const fromQuery = new URLSearchParams(window.location.search).get('sectionId');
+    const sections = classesQ.data.flatMap(c => c.sections);
+    const preset = fromQuery && sections.some(s => s.id === fromQuery) ? fromQuery : sections[0]?.id;
+    if (preset) setSectionId(preset);
   }, [classesQ.data, sectionId]);
 
   return (
@@ -181,8 +183,15 @@ function ComponentGrid({
   const isLocked = sheetQ.data.locked;
   // true only if the logged-in CLASS_TEACHER is the class teacher of THIS specific section
   const effectiveIsClassTeacher = sheetQ.data.isOwnClassTeacher;
-  // Principal/Admin can always edit even when locked; teachers cannot
-  const effectiveCanWrite = canWrite && (!isLocked || isPrincipal);
+  // A subject teacher (not the section's class teacher, not principal) viewing only their subject(s).
+  const isSubjectTeacherView = !effectiveIsClassTeacher && !isPrincipal;
+  // Their marks are locked once everything they can see has been submitted final (no drafts left).
+  const myMarksFinalized = isSubjectTeacherView
+    && sheetQ.data.students.some(s => s.subjects.some(su => su.components.length > 0))
+    && sheetQ.data.students.every(s => s.subjects.every(su => su.components.every(c => !c.draft)));
+  // Principal/Admin can always edit; the class teacher until section lock; a subject teacher only
+  // until they submit their marks final.
+  const effectiveCanWrite = canWrite && (!isLocked || isPrincipal) && !myMarksFinalized;
 
   const firstStudent = sheetQ.data.students[0];
   if (!firstStudent || !firstStudent.subjects.length) {
@@ -247,8 +256,23 @@ function ComponentGrid({
           </div>
         </div>
       )}
-      {/* Subject teacher / non-own-class-teacher context banner */}
-      {!effectiveIsClassTeacher && !isPrincipal && firstStudent.subjects.length > 0 && (
+      {/* Subject teacher: marks submitted & locked */}
+      {isSubjectTeacherView && myMarksFinalized && (
+        <div className="flex items-start gap-3 bg-slate-100 border border-slate-300 rounded-lg px-4 py-3">
+          <Lock size={18} className="text-slate-500 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-slate-700">
+              Marks submitted &amp; locked — {firstStudent.subjects.map(s => s.subjectName).join(', ')}
+            </p>
+            <p className="text-xs text-slate-500 mt-0.5">
+              You&apos;ve submitted these marks, so they&apos;re now read-only. Contact the class teacher or Principal if a correction is needed.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Subject teacher / non-own-class-teacher context banner (still editing) */}
+      {isSubjectTeacherView && !myMarksFinalized && firstStudent.subjects.length > 0 && (
         <div className="flex items-start gap-3 bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-3">
           <BookOpen size={18} className="text-indigo-600 mt-0.5 flex-shrink-0" />
           <div>
@@ -256,7 +280,7 @@ function ComponentGrid({
               Entering marks for: {firstStudent.subjects.map(s => s.subjectName).join(', ')}
             </p>
             <p className="text-xs text-indigo-600 mt-0.5">
-              Only your assigned subject(s) are shown. Enter marks and click <strong>Submit Final</strong> when done.
+              Only your assigned subject(s) are shown. Enter marks and click <strong>Submit Final</strong> when done — after that they&apos;re locked.
             </p>
           </div>
         </div>

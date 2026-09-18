@@ -19,9 +19,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -74,6 +76,27 @@ public class AcademicsController {
     @GetMapping("/exams")
     public ApiResponse<List<ExamResponse>> listExams(@PathVariable UUID tenantId) {
         return ApiResponse.success(examService.listCurrentYearExams(tenantId));
+    }
+
+    /** Replace the set of classes participating in an exam (Step 3). */
+    @PutMapping("/exams/{examId}/classes")
+    @PreAuthorize(AppRoles.OWNER_OR_ADMIN)
+    public ApiResponse<List<UUID>> setParticipatingClasses(
+        @PathVariable UUID tenantId,
+        @PathVariable UUID examId,
+        @RequestBody SetParticipatingClassesRequest request
+    ) {
+        return ApiResponse.success(examService.setParticipatingClasses(tenantId, examId, request.classIds()));
+    }
+
+    public record SetParticipatingClassesRequest(List<UUID> classIds) {}
+
+    /** Delete an exam and all its scoped data (marks, results, schedule, admit cards, …). */
+    @DeleteMapping("/exams/{examId}")
+    @PreAuthorize(AppRoles.OWNER_OR_ADMIN)
+    public ApiResponse<Void> deleteExam(@PathVariable UUID tenantId, @PathVariable UUID examId) {
+        examService.deleteExam(tenantId, examId);
+        return ApiResponse.ok();
     }
 
     @PostMapping("/exams/{examId}/publish")

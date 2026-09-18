@@ -160,8 +160,12 @@ public class SubstitutionPlannerService {
                 .map(TimetableEntry::getTeacherId).collect(Collectors.toCollection(HashSet::new));
             subsToday.stream().filter(s -> s.getPeriodId().equals(periodId))
                 .forEach(s -> busy.add(s.getSubstituteTeacherId()));
-            boolean alreadyCovered = subsToday.stream()
-                .anyMatch(s -> s.getPeriodId().equals(periodId) && s.getSectionId().equals(e.getSectionId()));
+            TimetableSubstitution coveringSub = subsToday.stream()
+                .filter(s -> s.getPeriodId().equals(periodId) && s.getSectionId().equals(e.getSectionId()))
+                .findFirst().orElse(null);
+            boolean alreadyCovered = coveringSub != null;
+            String coveredByName = coveringSub != null && staff.containsKey(coveringSub.getSubstituteTeacherId())
+                ? staff.get(coveringSub.getSubstituteTeacherId()).displayName() : null;
 
             List<Candidate> candidates = staff.values().stream()
                 .filter(s -> !s.getId().equals(teacherId) && !absentIds.contains(s.getId()) && !busy.contains(s.getId()))
@@ -196,7 +200,7 @@ public class SubstitutionPlannerService {
                 e.getSubjectId(),
                 e.getSubjectId() != null && subjects.containsKey(e.getSubjectId())
                     ? subjects.get(e.getSubjectId()).getName() : "—",
-                recommended, alreadyCovered, ranked));
+                recommended, alreadyCovered, coveredByName, ranked));
         }
 
         return new ReplacementPlan(teacherId, absent.displayName(), !classTeacherOf.isEmpty(), classTeacherOf, periodPlans);

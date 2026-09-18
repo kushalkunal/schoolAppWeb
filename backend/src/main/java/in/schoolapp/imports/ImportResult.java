@@ -1,5 +1,7 @@
 package in.schoolapp.imports;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -31,14 +33,14 @@ public class ImportResult<T> {
     public void recordError(int rowNumber, String message) { errors.add(new RowError(rowNumber, message)); }
     public void recordDuplicate(int rowNumber)             { skippedDuplicates.add(rowNumber); }
 
-    public boolean dryRun()                              { return dryRun; }
-    public int totalRowsRead()                           { return totalRowsRead; }
-    public List<T> accepted()                            { return List.copyOf(accepted); }
-    public List<RowError> errors()                       { return List.copyOf(errors); }
-    public List<Integer> skippedDuplicates()             { return List.copyOf(skippedDuplicates); }
-    public int acceptedCount()                           { return accepted.size(); }
-    public int errorCount()                              { return errors.size(); }
-    public int duplicateCount()                          { return skippedDuplicates.size(); }
+    @JsonProperty("dryRun")            public boolean dryRun()              { return dryRun; }
+    @JsonProperty("totalRowsRead")     public int totalRowsRead()           { return totalRowsRead; }
+    @JsonProperty("accepted")          public List<T> accepted()            { return List.copyOf(accepted); }
+    @JsonProperty("errors")            public List<RowError> errors()       { return List.copyOf(errors); }
+    @JsonProperty("skippedDuplicates") public List<Integer> skippedDuplicates() { return List.copyOf(skippedDuplicates); }
+    @JsonProperty("acceptedCount")     public int acceptedCount()           { return accepted.size(); }
+    @JsonProperty("errorCount")        public int errorCount()              { return errors.size(); }
+    @JsonProperty("duplicateCount")    public int duplicateCount()          { return skippedDuplicates.size(); }
 
     /**
      * @param row 1-based row number (the header line is row 1 — first data row is row 2)

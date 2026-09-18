@@ -1,7 +1,10 @@
 /** JWT claim shape — mirrors backend's JwtService.JwtClaims. */
 export type StaffRole =
   | 'SUPER_ADMIN' | 'SCHOOL_OWNER' | 'PRINCIPAL' | 'ADMIN'
-  | 'CLASS_TEACHER' | 'SUBJECT_TEACHER' | 'ACCOUNTANT' | 'LIBRARIAN' | 'VIEWER';
+  | 'CLASS_TEACHER' | 'SUBJECT_TEACHER' | 'ACCOUNTANT' | 'LIBRARIAN'
+  // RECEPTIONIST is wired through the frontend (nav + route access) but only takes effect
+  // once the backend StaffRole enum issues it in the JWT. Inert until then.
+  | 'RECEPTIONIST' | 'VIEWER';
 
 export interface JwtClaims {
   sub: string;       // staffId UUID

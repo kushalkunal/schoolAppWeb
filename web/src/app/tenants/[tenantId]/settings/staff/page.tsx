@@ -15,7 +15,7 @@ import type { CreateStaffRequest } from '@/types/domain';
 import type { StaffRole } from '@/auth/jwt';
 
 const ASSIGNABLE_ROLES: StaffRole[] = [
-  'PRINCIPAL', 'ADMIN', 'CLASS_TEACHER', 'SUBJECT_TEACHER', 'ACCOUNTANT', 'VIEWER',
+  'PRINCIPAL', 'ADMIN', 'CLASS_TEACHER', 'SUBJECT_TEACHER', 'ACCOUNTANT', 'RECEPTIONIST', 'VIEWER',
 ];
 
 export default function StaffSettingsPage() {

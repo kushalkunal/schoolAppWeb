@@ -74,6 +74,11 @@ public class Exam {
     @Column(name = "result_status", nullable = false, length = 15)
     private ResultStatus resultStatus = ResultStatus.DRAFT;
 
+    /** No-dues policy for admit-card issue (BLOCK by default — withhold while fees outstanding). */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "fee_policy", nullable = false, length = 10)
+    private FeePolicy feePolicy = FeePolicy.BLOCK;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;

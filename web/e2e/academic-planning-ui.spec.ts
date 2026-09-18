@@ -50,7 +50,8 @@ test.describe('Academic Planning module (admin)', () => {
 
   test('sidebar entry opens the module on the Live Monitor', async ({ page }) => {
     await goto(page, `/tenants/${TENANT}/dashboard`);
-    await page.getByRole('link', { name: 'Academic Planning' }).first().click();
+    // The sidebar entry for this module is labelled "Teachers & Timetable".
+    await page.getByRole('link', { name: 'Teachers & Timetable' }).first().click();
     await page.waitForLoadState('networkidle');
     await expect(page).toHaveURL(/academic-planning\/monitor/);
     await expect(page.getByRole('heading', { name: /Live Teaching Monitor/i })).toBeVisible();
@@ -76,7 +77,8 @@ test.describe('Academic Planning module (admin)', () => {
     await page.getByRole('link', { name: 'Teacher Allocations' }).click();
     await expect(page.getByRole('heading', { name: /Teacher Allocation Command Center/i })).toBeVisible();
 
-    await page.getByRole('link', { name: 'Timetable' }).click();
+    // exact:true so this matches only the sub-nav "Timetable", not the sidebar "Teachers & Timetable".
+    await page.getByRole('link', { name: 'Timetable', exact: true }).click();
     await page.waitForLoadState('networkidle');
     await expect(page).toHaveURL(/academic-planning\/timetable/);
 

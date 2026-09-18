@@ -8,7 +8,7 @@ export interface SubCandidate {
 export interface PeriodPlan {
   periodId: string; periodName: string; startTime: string | null; endTime: string | null;
   sectionId: string; sectionLabel: string; subjectId: string | null; subjectName: string;
-  recommendedStaffId: string | null; alreadyCovered: boolean; candidates: SubCandidate[];
+  recommendedStaffId: string | null; alreadyCovered: boolean; coveredByName: string | null; candidates: SubCandidate[];
 }
 export interface ReplacementPlan {
   absentTeacherId: string; absentTeacherName: string;

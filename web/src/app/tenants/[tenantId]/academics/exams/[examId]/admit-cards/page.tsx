@@ -102,7 +102,7 @@ export default function AdmitCardsPage() {
       {/* Back + Header */}
       <div className="flex items-center gap-2">
         <Link
-          href={`/tenants/${tenantId}/academics/exams/${examId}`}
+          href={`/tenants/${tenantId}/academics/exams`}
           className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"
         >
           <ChevronLeft className="w-5 h-5" />

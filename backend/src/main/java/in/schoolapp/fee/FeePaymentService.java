@@ -40,6 +40,7 @@ import java.util.UUID;
 public class FeePaymentService {
 
     private final FeePaymentRepository paymentRepository;
+    private final in.schoolapp.school.repository.StaffRepository staffRepository;
     private final FeeInvoiceService invoiceService;
     private final ReceiptService receiptService;
     private final StudentService studentService;
@@ -128,14 +129,22 @@ public class FeePaymentService {
         events.publishEvent(new FeePaymentCreatedEvent(
             tenantId, payment.getId(), student.getId(), amount, receiptNumber, pdfUrl));
 
-        return PaymentResponse.from(payment, outstanding);
+        return PaymentResponse.from(payment, outstanding, collectorName(payment.getCollectedById()));
+    }
+
+    /** Resolves a staff id to a display name (the accountant/cashier who collected). */
+    private String collectorName(UUID staffId) {
+        if (staffId == null) return null;
+        return staffRepository.findById(staffId)
+            .map(s -> s.getFirstName() + (s.getLastName() != null ? " " + s.getLastName() : ""))
+            .orElse(null);
     }
 
     @Transactional(readOnly = true)
     public PaymentResponse getPayment(UUID tenantId, UUID paymentId) {
         FeePayment p = paymentRepository.findByIdAndSchoolId(paymentId, tenantId)
             .orElseThrow(() -> AppException.notFound(ErrorCode.RECEIPT_NOT_FOUND, "Payment", paymentId));
-        return PaymentResponse.from(p, invoiceService.getOutstanding(p.getStudentId()));
+        return PaymentResponse.from(p, invoiceService.getOutstanding(p.getStudentId()), collectorName(p.getCollectedById()));
     }
 
     /**
@@ -267,7 +276,7 @@ public class FeePaymentService {
         var invoices = invoiceService.listInvoicesForStudent(studentId);
         var payments = paymentRepository.findByStudentIdOrderByPaymentDateDesc(studentId).stream()
             .limit(20)
-            .map(p -> PaymentResponse.from(p, outstanding))
+            .map(p -> PaymentResponse.from(p, outstanding, collectorName(p.getCollectedById())))
             .toList();
         long totalPaid = payments.stream().mapToLong(PaymentResponse::amountPaise).sum();
         return new StudentFeeSummaryResponse(studentId, outstanding, totalPaid, invoices, payments);
